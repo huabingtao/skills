@@ -7,7 +7,7 @@ This directory is a **Gemini CLI Skill Package** designed to generate profession
 - **`SKILL.md`**: The primary instructional document. It defines the "Persona" (弹壳呱呱), specific templates for articles, formatting standards for tables, and mandatory disclaimers.
 - **`danke-strategy.skill`**: The binary skill definition file used by Gemini CLI to load this capability.
 - **`assets/templates/`**: Contains `.docx` templates for different types of guides (event previews, standard guides).
-- **`assets/img/`**: A library of game-related images (S/SS equipment, materials, etc.) used to enrich the generated content. `top.jpg` is the mandatory header image.
+- **`assets/img/`**: A library of game-related images (S/SS equipment, materials, etc.) used to enrich the generated content. `article-top.jpg` is the mandatory header image.
 - **`references/`**: The project's knowledge base.
     - `docs/`: Original `.docx` files containing comprehensive guides, synthesis tables, and equipment introductions.
     - `*.md`: Extracted and condensed markdown files for quick reference (e.g., `equipment.md`, `cores.md`).
@@ -24,7 +24,7 @@ When performing tasks within this project, adhere to the following:
     - Before generating or updating content, prioritize reading the files in `references/` and `references/docs/` to ensure accuracy regarding game stats and strategies.
 
 3.  **Visual Standards:**
-    - Mention or use `assets/img/top.jpg` as the primary header for articles.
+    - Mention or use `assets/img/article-top.jpg` as the primary header for articles.
     - Follow the **Table Beautification Standards** in `SKILL.md` (e.g., `#2C3E50` header background, zebra striping) when outputting or designing tables.
 
 4.  **Template Adherence:**
