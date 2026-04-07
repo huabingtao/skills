@@ -7,7 +7,7 @@ This directory is a **Gemini CLI Skill Package** designed to generate profession
 - **`SKILL.md`**: The primary instructional document. It defines the "Persona" (弹壳呱呱), specific templates for articles, formatting standards for tables, and mandatory disclaimers.
 - **`danke-strategy.skill`**: The binary skill definition file used by Gemini CLI to load this capability.
 - **`assets/templates/`**: Contains `.docx` templates for different types of guides (event previews, standard guides).
-- **`assets/img/`**: A library of game-related images, categorized into subdirectories: `装备`, `配件`, `特工`, `收藏品`, `宠物`, and `道具`. `article-top.jpg` is the mandatory header image.
+- **`assets/img/`**: A library of game-related images, categorized into subdirectories: `装备`, `宝箱`, `配件`, `收藏品`, `宠物`, `道具`, and `其它`. `article-top.jpg` is the mandatory header image.
 - **`references/`**: The project's knowledge base.
     - `docs/`: Original `.docx` files containing comprehensive guides, synthesis tables, and equipment introductions.
     - `*.md`: Extracted and condensed markdown files for quick reference (e.g., `equipment.md`, `cores.md`).
