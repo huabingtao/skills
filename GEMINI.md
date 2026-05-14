@@ -1,36 +1,24 @@
-# Gemini Project Context: 弹壳特攻队攻略生成助手 (danke-strategy-skill)
+# Gemini 项目上下文：弹壳特攻队攻略美化助手 (danke-strategy-skill)
 
-## Directory Overview
-This directory is a **Gemini CLI Skill Package** designed to generate professional game guides for "Survivor.io" (弹壳特攻队). It contains structured instructions, visual assets, and a knowledge base (references) for equipment, pets, and game mechanics.
+## 目录概览
+本目录是一个 **Gemini CLI 技能包**，专门用于对现有的《弹壳特攻队》(Survivor.io) 攻略文章进行**视觉美化与排版优化**。
 
-## Key Files
-- **`SKILL.md`**: The primary instructional document. It defines the "Persona" (弹壳呱呱), specific templates for articles, formatting standards for tables, and mandatory disclaimers.
-- **`danke-strategy.skill`**: The binary skill definition file used by Gemini CLI to load this capability.
-- **`assets/templates/`**: Contains `.docx` templates for different types of guides (event previews, standard guides).
-- **`assets/img/`**: A library of game-related images, categorized into subdirectories: `装备`, `宝箱`, `配件`, `收藏品`, `宠物`, `道具`, and `其它`. `article-top.jpg` is the mandatory header image.
-- **`references/`**: The project's knowledge base.
-    - `docs/`: Original `.docx` files containing comprehensive guides, synthesis tables, and equipment introductions.
-    - `*.md`: Extracted and condensed markdown files for quick reference (e.g., `equipment.md`, `cores.md`).
+## 核心指令：响应式优化 (Reactive Optimization)
+根据用户的明确要求，该技能已从“写作助手”转变为**“美化引擎”**。
+- **严禁**使用此技能从零开始生成新的攻略文章。
+- **仅在**用户提供现有文本并要求“美化”、“优化”或“排版”时才激活。
 
-## Usage & Implementation Guidelines
-When performing tasks within this project, adhere to the following:
+## 使用与实现指南
+1.  **人设管理：**
+    - 所有的优化转换必须遵循“弹壳呱呱”的人设。
+    - 强制开篇：大家好，我是弹壳呱呱，一个坚持提供全网免费弹壳特攻队攻略的博主，专注于研究游戏内各种攻略，关注我少走弯路，一起变强！。
+    - 强制页脚：包含“【免责声明】本攻略纯属个人经验分享，仅供参考，不构成任何投资或消费建议。游戏版本更新较快，具体数值以游戏内实际表现为准。本攻略所引用的美术图片及游戏内截图版权均归 Habby 公司所有。
+    如果本篇攻略帮到了你，别忘了点赞和关注哦！你们的支持是我更新的动力！对攻略有疑问？欢迎在评论区留言讨论，我会第一时间回复大家，我们下期再见bye。”以及标准化的加粗免责声明。”。
 
-1.  **Content Generation (The "Persona"):**
-    - Always use the persona **"弹壳呱呱"**.
-    - Follow the specific opening and closing remarks defined in `SKILL.md`.
-    - Always include the mandatory **Disclaimer** at the end.
+2.  **格式化逻辑：**
+    - 使用 `references/formatting_rules.md` 进行语义化颜色编码。
+    - 使用 `references/image_mapping.md` 注入相关的游戏素材（PNG/WebP）。
 
-2.  **Referencing Data:**
-    - Before generating or updating content, prioritize reading the files in `references/` and `references/docs/` to ensure accuracy regarding game stats and strategies.
-
-3.  **Visual Standards:**
-    - Mention or use `assets/img/article-top.jpg` as the primary header for articles.
-    - Follow the **Table Beautification Standards** in `SKILL.md` (e.g., `#2C3E50` header background, zebra striping) when outputting or designing tables.
-
-4.  **Template Adherence:**
-    - For activity/event guides, follow the structure in `assets/templates/guide_template.docx`.
-
-## Development Tasks
-- **Updating Knowledge Base:** When game updates occur (new SS equipment, etc.), update the relevant files in `references/`.
-- **Modifying Templates:** If the blogger's style changes, update `SKILL.md` and the templates in `assets/templates/`.
-- **Adding Assets:** New equipment images should be added to `assets/img/` for future reference.
+3.  **内容完整性：**
+    - 必须保留用户原始的策略建议和事实。
+    - 仅专注于提升可读性、结构感和视觉吸引力。
