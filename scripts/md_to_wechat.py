@@ -24,9 +24,8 @@ def convert_to_wechat_html(md_content):
                 print(f"⚠ Warning: Failed to parse frontmatter: {e}")
 
     # Enable common extensions
-    # 'fenced_code' for ``` blocks, 'tables' for table support, 'toc' for table of contents
-    # 'nl2br' makes single newlines into <br> tags
-    extensions = ['fenced_code', 'tables', 'toc', 'nl2br']
+    # 'fenced_code' for ``` blocks, 'tables' for table support, 'nl2br' for newline handling
+    extensions = ['fenced_code', 'tables', 'nl2br', 'toc']
     html = markdown.markdown(md_content, extensions=extensions)
     
     # (Rest of styles definition unchanged...)
@@ -76,32 +75,6 @@ def convert_to_wechat_html(md_content):
     html = re.sub(r'<(th)([^>]*)>', lambda m: add_style(m, styles['th']), html)
     html = re.sub(r'<(td)([^>]*)>', lambda m: add_style(m, styles['td']), html)
 
-    # Handle [!TIP] and [!WARNING] markers in blockquotes
-    def replace_callouts(match):
-        type_marker = match.group(1)
-        content = match.group(2)
-        
-        if "TIP" in type_marker:
-            bg_color = "#f6ffed"
-            border_color = "#b7eb8f"
-            text_color = "#389e0d"
-            icon = "💡"
-            label = "呱呱小贴士"
-        else:
-            bg_color = "#fffbe6"
-            border_color = "#ffe58f"
-            text_color = "#d48806"
-            icon = "⚠️"
-            label = "呱呱避坑指南"
-            
-        return f'<blockquote style="border-left: 8px solid {border_color}; background-color: {bg_color}; color: {text_color}; padding: 15px 20px; margin: 20px 0; border-radius: 6px;">' \
-               f'<p style="margin: 0 0 8px 0; font-weight: bold; font-size: 17px;">{icon} {label}</p>' \
-               f'<p style="margin: 0; line-height: 1.6; font-size: 15px;">{content.strip()}</p></blockquote>'
-
-    # Pattern matches <blockquote>...[!TIP]...</blockquote>
-    html = re.sub(r'<blockquote style="[^"]*">\s*<p[^>]*>\s*\[!(TIP|WARNING)\]\s*(.*?)</p>\s*</blockquote>', 
-                  replace_callouts, html, flags=re.DOTALL)
-
     # Code Blocks (pre > code)
     # The markdown library usually generates <pre><code class="language-python">...</code></pre>
     html = re.sub(r'<(pre)([^>]*)>', lambda m: add_style(m, styles['pre']), html)
@@ -134,13 +107,9 @@ def convert_to_wechat_html(md_content):
         
         inline_style = ""
         if params.get('type') == 'card':
-            inline_style = "display: block; margin: 20px auto; width: 20%; text-align: center; max-width: 100px; border-radius: 12px; box-shadow: 0 10px 20px rgba(0,0,0,0.1); border: 1px solid #eee;"
-            if 'data-type="card"' not in img_tag:
-                img_tag = img_tag.replace('<img', '<img data-type="card"')
+            inline_style = "display: block; margin: 20px auto; width: 90%; max-width: 100%; border-radius: 12px; box-shadow: 0 10px 20px rgba(0,0,0,0.1); border: 1px solid #eee;"
         elif params.get('type') == 'icon' or params.get('icon') == 'card':
-            inline_style = "width: 38px; height: 38px; vertical-align: middle; display: inline-block; margin: -2px 4px 0 4px;"
-            if 'data-type="icon"' not in img_tag:
-                img_tag = img_tag.replace('<img', '<img data-type="icon"')
+            inline_style = "width: 24px; height: 24px; vertical-align: middle; display: inline-block; margin: -2px 4px 0 4px;"
         else:
             # Custom w/h
             if 'w' in params:
@@ -158,82 +127,9 @@ def convert_to_wechat_html(md_content):
         return img_tag
 
     # Match <img ... />{style_params}
+    # Note: markdown library might wrap the style in a separate paragraph if there's a newline,
+    # but if it's on the same line it will be <img ... />{...}
     html = re.sub(r'(<img[^>]*?>)\{(.*?)\}', apply_image_styles, html)
-
-    # 4. Handle [占位图:NAME type=...] Custom Placeholders
-    def replace_placeholder(match):
-        name = match.group(1).strip()
-        img_type = match.group(2).strip()
-        
-        # Find path
-        img_path = ""
-        # Search common directories for icons
-        search_dirs = [
-            'assets/img/其它', 'assets/img/道具', 'assets/img/配件', 
-            'assets/img/收藏品', 'assets/img/装备', 'assets/img/宝箱', 'assets/img/碎片'
-        ]
-        
-        # Try exact name in common dirs (case-insensitive)
-        name_lower = name.lower()
-        for d in search_dirs:
-            if not os.path.exists(d): continue
-            for f in os.listdir(d):
-                fname, ext = os.path.splitext(f)
-                if fname.lower() == name_lower and ext.lower() in ['.png', '.jpg', '.webp', '.jpeg']:
-                    img_path = os.path.join(d, f)
-                    break
-            if img_path: break
-        
-        # Fallback to recursive search (case-insensitive)
-        if not img_path:
-             for root, dirs, files in os.walk('assets/img'):
-                 for f in files:
-                     fname, ext = os.path.splitext(f)
-                     if fname.lower() == name_lower and ext.lower() in ['.png', '.jpg', '.webp', '.jpeg']:
-                         img_path = os.path.join(root, f)
-                         break
-                 if img_path: break
-        
-        if img_path:
-            if img_type == 'card':
-                # Card style: block, rounded corners
-                inline_style = "display: block; margin: 20px auto; width: 20%; text-align: center; max-width: 100px; border-radius: 12px; box-shadow: 0 10px 20px rgba(0,0,0,0.1); border: 1px solid #eee;"
-                return f'<img data-type="card" style="{inline_style}" src="{img_path}" alt="{name}" />'
-            else:
-                # Default to icon style
-                inline_style = "width: 38px; height: 38px; vertical-align: middle; display: inline-block; margin: -2px 4px 0 4px;"
-                return f'<img data-type="icon" style="{inline_style}" src="{img_path}" alt="{name}" />'
-        
-        return match.group(0)
-
-    html = re.sub(r'!?\[占位图:(.*?)\s+type=(.*?)\]', replace_placeholder, html)
-
-    # 5. Prevent Line Breaks for Icons (Unwrap standalone icons from <p> tags)
-    # This removes the block-level margins that cause line breaks
-    html = re.sub(r'<(p)[^>]*>\s*(<img [^>]*data-type="icon"[^>]*>)\s*</p>', r'\2', html)
-    # Also handle multiple icons in one paragraph if they are the ONLY content
-    html = re.sub(r'<(p)[^>]*>\s*((?:<img [^>]*data-type="icon"[^>]*>\s*)+)</p>', r'\2', html)
-
-    # 6. Force Centering for Cards (Ensure parent <p> is centered)
-    # Find <p> tags that ONLY contain a card image and change their alignment to center
-    html = re.sub(r'<(p)[^>]*>\s*(<img [^>]*data-type="card"[^>]*>)\s*</p>', 
-                  r'<p style="text-align: center; margin: 20px 0; display: block;">\2</p>', html)
-
-    # 7. Default styling for standard images (auto-imported weapons/skills)
-    # If an image doesn't have a style or data-type yet, treat it as a 38px icon
-    default_icon_style = 'style="width: 38px; height: 38px; vertical-align: middle; display: inline-block; margin: -2px 4px 0 4px;"'
-    html = re.sub(r'<img(?![^>]*style=)([^>]*?)>', rf'<img \1 {default_icon_style} data-type="icon">', html)
-
-    # 8. Auto-highlight Statistics (Percentages)
-    # Automatically colors percentage values (e.g., 5%, +10%) in red.
-    # The regex skips percentages inside HTML tag attributes (like width="100%").
-    html = re.sub(r'(?<![0-9;])(\+?\d+(?:\.\d+)?%)(?![^<]*>)', 
-                  r'<span style="color: #FF4D4F; font-weight: bold;">\1</span>', html)
-
-    # 9. Add Global Background Container
-    # Wraps everything in a light grey section for better readability and style
-    bg_style = 'style="background-color: #F8F9FA; padding: 20px 15px; border-radius: 12px; margin: 10px; box-sizing: border-box;"'
-    html = f'<section {bg_style}>{html}</section>'
 
     return html, metadata
 

@@ -81,6 +81,36 @@ def load_config():
                 return json.load(f)
     return {}
 
+def setup_interactive_config():
+    """Interactively ask user for WeChat credentials and remind about IP whitelist."""
+    print("\n" + "!"*60)
+    print("🛠️  WECHAT OFFICIAL ACCOUNT SETUP")
+    print("!"*60)
+    print("To publish drafts, you need credentials from the WeChat Admin Platform.")
+    print("Location: Settings & Development > Basic Configuration")
+    print("\n🚨 CRITICAL STEP:")
+    print("You MUST add your server/local IP to the 'IP Whitelist' in the")
+    print("WeChat Admin Platform, otherwise the API will reject all requests.")
+    print("!"*60 + "\n")
+    
+    appid = input("Enter your WeChat AppID: ").strip()
+    appsecret = input("Enter your WeChat AppSecret: ").strip()
+    
+    if not appid or not appsecret:
+        return None, None
+        
+    save = input("\nSave these credentials to scripts/config.json for future use? (y/n): ")
+    if save.lower() == 'y':
+        try:
+            config_path = os.path.join(os.path.dirname(__file__), 'config.json')
+            with open(config_path, 'w', encoding='utf-8') as f:
+                json.dump({"appid": appid, "appsecret": appsecret}, f, indent=2)
+            print(f"✅ Configuration saved to: {config_path}")
+        except Exception as e:
+            print(f"⚠ Warning: Could not save config file: {e}")
+            
+    return appid, appsecret
+
 def main():
     parser = argparse.ArgumentParser(description="Universal WeChat Official Account Draft Publisher")
     parser.add_argument("-t", "--title", help="Article title (auto-detected if missing)")
@@ -125,12 +155,14 @@ def main():
 
     # Resolve credentials
     config = load_config()
-    appid = args.appid or config.get('appid')
-    appsecret = args.secret or config.get('appsecret')
+    appid = args.appid or os.environ.get('WECHAT_APPID') or config.get('appid')
+    appsecret = args.secret or os.environ.get('WECHAT_APPSECRET') or config.get('appsecret')
 
     if not appid or not appsecret:
-        print("❌ Error: AppID or AppSecret missing. Provide via --appid/--secret or a config.json file.")
-        sys.exit(1)
+        appid, appsecret = setup_interactive_config()
+        if not appid or not appsecret:
+            print("❌ Error: WeChat credentials are required to proceed.")
+            sys.exit(1)
 
     if not os.path.exists(args.content):
         print(f"❌ Error: Content file not found: {args.content}")
@@ -139,6 +171,21 @@ def main():
     if not os.path.exists(cover_path):
         print(f"❌ Error: Cover image not found: {cover_path}")
         sys.exit(1)
+
+    # Confirmation Prompt
+    print("\n" + "="*50)
+    print("🚀 PRE-FLIGHT CHECK")
+    print("="*50)
+    print(f"Title:  {title}")
+    print(f"Author: {author}")
+    print(f"Cover:  {cover_path}")
+    print(f"HTML:   {args.content}")
+    print("="*50)
+    
+    confirm = input("\nReady to push to WeChat Official Account Drafts? (y/n): ")
+    if confirm.lower() != 'y':
+        print("❌ Upload cancelled by user.")
+        sys.exit(0)
 
     client = WeChatClient(appid, appsecret)
 
