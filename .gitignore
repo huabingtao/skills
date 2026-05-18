@@ -6,3 +6,6 @@ node_modules/
 .continue/
 .windsurf/
 .kiro/
+scripts/config.json
+.wechat_token_cache.json
+test/
