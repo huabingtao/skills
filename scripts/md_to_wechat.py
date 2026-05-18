@@ -110,12 +110,19 @@ def convert_to_wechat_html(md_content):
             inline_style = "display: block; margin: 20px auto; width: 90%; max-width: 100%; border-radius: 12px; box-shadow: 0 10px 20px rgba(0,0,0,0.1); border: 1px solid #eee;"
         elif params.get('type') == 'icon' or params.get('icon') == 'card':
             inline_style = "width: 24px; height: 24px; vertical-align: middle; display: inline-block; margin: -2px 4px 0 4px;"
+        elif params.get('type') == 'grid4':
+            # Four images per row: approx 23% width each with margins
+            inline_style = "width: 23%; display: inline-block; margin: 5px 1%; vertical-align: middle; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);"
         else:
             # Custom w/h
             if 'w' in params:
                 inline_style += f"width: {params['w']}; "
             if 'h' in params:
                 inline_style += f"height: {params['h']}; "
+        
+        # Add padding support (pd=2 -> padding: 2px;)
+        if 'pd' in params:
+            inline_style += f"padding: {params['pd']}px; box-sizing: border-box; "
         
         if inline_style:
             if 'style="' in img_tag:
