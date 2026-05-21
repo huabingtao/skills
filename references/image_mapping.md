@@ -128,3 +128,12 @@
 | **【马碎片】** | `![末世战马碎片](assets/img/碎片/末世战马碎片.png)` | 材料 |
 | **【滑板碎片】** | `![科技滑板碎片](assets/img/碎片/科技滑板碎片.png)` | 材料 |
 | **【平衡车碎片】** | `![电动平衡车碎片](assets/img/碎片/电动平衡车碎片.png)` | 材料 |
+
+## ⭐ 其它 (图标等)
+| 关键词 | 追加图片路径 | 说明 |
+| :--- | :--- | :--- |
+| **【Goldenstar】** | `![Goldenstar](assets/img/其它/Golenstar.png)` | 黄金星级图标 |
+| **【Golenstar】** | `![Golenstar](assets/img/其它/Golenstar.png)` | 黄金星级图标 (兼容文件名拼写) |
+| **【Readstar】** | `![Readstar](assets/img/其它/Redstar.png)` | 红色星级图标 |
+| **【Redstar】** | `![Redstar](assets/img/其它/Redstar.png)` | 红色星级图标 (兼容文件名拼写) |
+

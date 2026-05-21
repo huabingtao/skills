@@ -120,7 +120,7 @@ def convert_to_wechat_html(md_content):
 
     # Convert <font color="..."> (from Survivor.io strategy rules) to <span style="color: ...">
     # This ensures better rendering consistency in modern WeChat views.
-    html = re.sub(r'<font color="(.*?)">(.*?)</font>', r'<span style="color: \1; font-weight: bold;">\2</span>', html)
+    html = re.sub(r'<font\s+[^>]*?color=["\'](.*?)["\']\s*>(.*?)</font>', r'<span style="color: \1; font-weight: bold;">\2</span>', html, flags=re.IGNORECASE)
 
     # Custom Image Styling Support: ![alt](src){style_params}
     # We do this on the generated HTML to handle attributes correctly
@@ -178,7 +178,8 @@ def convert_to_wechat_html(md_content):
     # Match <img ... />{style_params}
     # Note: markdown library might wrap the style in a separate paragraph if there's a newline,
     # but if it's on the same line it will be <img ... />{...}
-    html = re.sub(r'(<img[^>]*?>)\{(.*?)\}', apply_image_styles, html)
+    # Allow optional whitespace before the curly braces
+    html = re.sub(r'(<img[^>]*?>)\s*\{(.*?)\}', apply_image_styles, html)
 
     # Resolve all image paths intelligently (supporting img://, bare name, or partial paths)
     def resolve_image_path(match):
@@ -208,7 +209,11 @@ def convert_to_wechat_html(md_content):
 
     html = re.sub(r'src=["\']([^"\']+)["\']', resolve_image_path, html)
 
-    return html, metadata
+    # Wrap in a modern WeChat-optimized responsive container
+    container_style = 'font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, \'Helvetica Neue\', Arial, \'PingFang SC\', \'Hiragino Sans GB\', \'Microsoft YaHei\', sans-serif; padding: 15px; max-width: 100%; box-sizing: border-box; font-size: 16px; color: #333; line-height: 1.8; word-wrap: break-word; text-align: justify;'
+    wrapped_html = f'<div style="{container_style}">\n{html}\n</div>'
+
+    return wrapped_html, metadata
 
 def main():
     if len(sys.argv) < 2:
