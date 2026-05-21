@@ -1,8 +1,33 @@
-# Image Test Article
-This article contains images to test automatic uploading.
+# 占位图测试文稿
 
-## 1. Local Image
-![Local](assets/img/配件/无人机.png)
+测试免路径占位图 `img://` 协议解析渲染效果。
 
-## 2. Remote Image
-![Remote](https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png)
+## 1. 大卡片式展示（SS 武器）
+![双绝枪](img://双绝枪){type=card}
+
+## 2. 大卡片式展示（收藏品）
+![等离子剑](等离子剑){type=card}
+
+## 3. 行内小图标展示（配件与道具）
+增强 **【无人机】**![无人机](无人机){type=icon} 发射器的伤害！使用 **【钻石】**![钻石](img://钻石){type=icon} 兑换福利。
+
+## 4. 新增的通用图片排版样式测试
+
+### Banner 宽幅海报
+![双生无人机](img://双生无人机){type=banner}
+
+### Grid2 双栏对比
+![双生导弹](双生导弹.png){type=grid2}![双生雷电](双生雷电.png){type=grid2}
+
+### Grid3 三栏并排
+![双生燃烧瓶](img://双生燃烧瓶){type=grid3}![双生足球](img://双生足球){type=grid3}![双生钻头](img://双生钻头){type=grid3}
+
+### Grid4 四栏并排
+![雷电](img://雷电){type=grid4}![无人机](img://无人机){type=grid4}![足球](img://足球){type=grid4}![钻头](img://钻头){type=grid4}
+
+### Float-Left 图文混排（左浮动）
+![神罚项链](img://神罚项链){type=float-left}**【神罚项链】**是SS阶项链，其独特的技能机制能够大幅度提升玩家的暴击率和技能冷却缩减，非常适合与高频输出的装备进行搭配。
+
+### Avatar 头像微标
+我们推荐玩家使用 **【月殇护手】**![月殇护手](img://月殇护手){type=avatar} 来作为主力手套装备。
+

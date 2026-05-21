@@ -6,6 +6,31 @@ import os
 import yaml
 import json
 
+def load_image_mapping(mapping_path):
+    """
+    Parses image_mapping.md to build a dictionary of {keyword: image_path}
+    """
+    mapping = {}
+    if not os.path.exists(mapping_path):
+        return mapping
+        
+    # Regular expression to extract the key name and image path from the Markdown table row.
+    # Matches: | **【双绝枪】** | `![双绝枪](assets/img/装备/ss武器-双绝枪-原始形态.png)` | ...
+    line_pattern = re.compile(r'^\s*\|\s*(?:\*\*)?【?([^】\*]+)】?(?:\*\*)?\s*\|\s*`?!\s*\[[^\]]*\]\(([^)]+)\)`?\s*\|')
+    
+    try:
+        with open(mapping_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                match = line_pattern.match(line)
+                if match:
+                    key = match.group(1).strip()
+                    path = match.group(2).strip()
+                    mapping[key] = path
+    except Exception as e:
+        print(f"⚠ Warning: Failed to parse image mapping dictionary: {e}")
+        
+    return mapping
+
 def convert_to_wechat_html(md_content):
     """
     Converts Markdown content to HTML with inline CSS styles optimized for WeChat Official Accounts.
@@ -22,6 +47,11 @@ def convert_to_wechat_html(md_content):
                 md_content = parts[2]
             except Exception as e:
                 print(f"⚠ Warning: Failed to parse frontmatter: {e}")
+
+    # Load image mapping dictionary
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    mapping_file = os.path.abspath(os.path.join(script_dir, '../references/image_mapping.md'))
+    image_mapping = load_image_mapping(mapping_file)
 
     # Enable common extensions
     # 'fenced_code' for ``` blocks, 'tables' for table support, 'nl2br' for newline handling
@@ -45,7 +75,7 @@ def convert_to_wechat_html(md_content):
         'td': 'style="border: 1px solid #dfe2e5; padding: 10px 15px; text-align: left; color: #24292e;"',
         'blockquote': 'style="border-left: 5px solid #dfe2e5; color: #6a737d; padding: 12px 20px; margin: 22px 0; background-color: #fafbfc; border-radius: 0 6px 6px 0;"',
         'hr': 'style="height: 2px; padding: 0; margin: 30px 0; background-color: #e1e4e8; border: 0;"',
-        'strong': 'style="font-weight: bold; color: #000;"'
+        'strong': 'style="font-weight: bold;"'
     }
 
     # Apply styles using regex
@@ -106,13 +136,25 @@ def convert_to_wechat_html(md_content):
                 params[k.strip()] = v.strip()
         
         inline_style = ""
-        if params.get('type') == 'card':
+        img_type = params.get('type')
+        if img_type == 'card':
             inline_style = "display: block; margin: 20px auto; width: 90%; max-width: 100%; border-radius: 12px; box-shadow: 0 10px 20px rgba(0,0,0,0.1); border: 1px solid #eee;"
-        elif params.get('type') == 'icon' or params.get('icon') == 'card':
-            inline_style = "width: 24px; height: 24px; vertical-align: middle; display: inline-block; margin: -2px 4px 0 4px;"
-        elif params.get('type') == 'grid4':
-            # Four images per row: approx 23% width each with margins
-            inline_style = "width: 23%; display: inline-block; margin: 5px 1%; vertical-align: middle; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);"
+        elif img_type == 'banner':
+            inline_style = "display: block; margin: 20px auto; width: 100%; max-width: 100%; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.08);"
+        elif img_type == 'grid2':
+            inline_style = "width: 48%; display: inline-block; margin: 10px 1%; vertical-align: middle; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.06); border: 1px solid #eee; box-sizing: border-box;"
+        elif img_type == 'grid3':
+            inline_style = "width: 31.3%; display: inline-block; margin: 10px 1%; vertical-align: middle; border-radius: 6px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); border: 1px solid #eee; box-sizing: border-box;"
+        elif img_type == 'grid4':
+            inline_style = "width: 23%; display: inline-block; margin: 10px 1%; vertical-align: middle; border-radius: 6px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); border: 1px solid #eee; box-sizing: border-box;"
+        elif img_type == 'float-left':
+            inline_style = "float: left; width: 80px; height: 80px; margin: 5px 15px 5px 0; border-radius: 10px; border: 1px solid #eee; box-shadow: 0 2px 6px rgba(0,0,0,0.08); object-fit: cover;"
+        elif img_type == 'float-right':
+            inline_style = "float: right; width: 80px; height: 80px; margin: 5px 0 5px 15px; border-radius: 10px; border: 1px solid #eee; box-shadow: 0 2px 6px rgba(0,0,0,0.08); object-fit: cover;"
+        elif img_type == 'avatar':
+            inline_style = "width: 30px; height: 30px; border-radius: 50%; vertical-align: middle; display: inline-block; margin: -2px 4px 0 4px; border: 1.5px solid #2c3e50; box-shadow: 0 2px 4px rgba(0,0,0,0.1); box-sizing: border-box; object-fit: cover;"
+        elif img_type == 'icon' or params.get('icon') == 'card':
+            inline_style = "width: 24px; height: 24px; vertical-align: middle; display: inline-block; margin: -2px 4px 0 4px; object-fit: cover;"
         else:
             # Custom w/h
             if 'w' in params:
@@ -137,6 +179,34 @@ def convert_to_wechat_html(md_content):
     # Note: markdown library might wrap the style in a separate paragraph if there's a newline,
     # but if it's on the same line it will be <img ... />{...}
     html = re.sub(r'(<img[^>]*?>)\{(.*?)\}', apply_image_styles, html)
+
+    # Resolve all image paths intelligently (supporting img://, bare name, or partial paths)
+    def resolve_image_path(match):
+        original_src = match.group(1).strip()
+        
+        # Ignore external http/https URLs
+        if original_src.startswith('http://') or original_src.startswith('https://'):
+            return match.group(0)
+            
+        # Clean the src path (e.g. strip img:// prefix if present)
+        src_clean = original_src.replace('img://', '')
+        
+        # Extract the base key (e.g., "assets/img/装备/ss武器-双绝枪.png" -> "ss武器-双绝枪")
+        base_name = os.path.basename(src_clean)
+        key_name = os.path.splitext(base_name)[0]
+        
+        # Try finding a path in image_mapping
+        real_path = image_mapping.get(src_clean) or image_mapping.get(base_name) or image_mapping.get(key_name)
+        
+        if real_path:
+            return f'src="{real_path}"'
+        else:
+            # If not in mapping, keep as is but print warning only if it's not already a valid assets path
+            if not original_src.startswith('assets/'):
+                print(f"⚠ Warning: Image path not found in mapping dictionary for: {original_src}")
+            return match.group(0)
+
+    html = re.sub(r'src=["\']([^"\']+)["\']', resolve_image_path, html)
 
     return html, metadata
 
