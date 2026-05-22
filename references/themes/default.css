@@ -13,19 +13,17 @@ h1 {
 h2 {
   font-size: 1.4em;
   font-weight: bold;
-  border-left: 6px solid #2c3e50;
-  padding-left: 12px;
+  text-align: center;
   margin-top: 25px;
   margin-bottom: 15px;
   color: #2c3e50;
-  background-color: #f8f9fa;
-  padding-top: 5px;
-  padding-bottom: 5px;
+  padding-bottom: 8px;
 }
 
 h3 {
   font-size: 1.2em;
   font-weight: bold;
+  text-align: center;
   margin-top: 20px;
   margin-bottom: 10px;
   color: #34495e;
