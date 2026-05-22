@@ -15,7 +15,7 @@
 ## 使用与实现指南
 1.  **格式化逻辑：**
     - 使用内容包 `packs/danke/formatting_rules.md` 进行语义化颜色编码。
-    - 使用内容包 `packs/danke/image_mapping.md` 注入相关的游戏素材（PNG/WebP）。
+    - 使用内容包 `packs/danke/image_mapping.json` 注入相关的游戏素材（PNG/WebP）。
     - **微信公众号适配**：项目包含通用排版引擎 `engine/`，可通过 `scripts/compile.py --pack packs/danke <input_md_file>` 将美化后的 Markdown 转换为带有行内 CSS 的 HTML，完美适配微信公众号后台。
 
 2.  **内容完整性：**

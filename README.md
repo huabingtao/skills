@@ -15,7 +15,7 @@
   - <font color="#52C41A">**冷却/范围/异常类**</font>数值自动标绿。
 
 ### 2. 智能免路径配图 (Path-Free Image Resolution)
-通过内容包内置的图片映射字典 `image_mapping.md`，提供便捷的免路径配图机制：
+通过内容包内置的图片映射字典 `image_mapping.json`，提供便捷的免路径配图机制：
 - **宽泛名称匹配**：用户在 Markdown 中无需记忆和书写复杂的本地绝对路径，可以直接书写裸名（如 `![等离子剑](等离子剑)`）或带后缀名（如 `![双生导弹](双生导弹.png)`）或使用虚拟协议 `![双绝枪](img://双绝枪)`。
 - **字典自动检索**：转换脚本会自动提取名称，去字典中智能匹配为真实本地素材物理路径（如 `packs/danke/assets/img/收藏品/等离子剑.png`）。
 - **外部链接智能放行**：对 `http://` 或 `https://` 的外网图片链接自动忽略检索，保持原样，实现本地与外网图床混排。
@@ -60,7 +60,7 @@
 │   └── danke/              # 弹壳特攻队攻略专属内容包
 │       ├── project.json    # 内容包配置 (指定图片字典、高亮规则与资源目录)
 │       ├── formatting_rules.md # 文本排版与颜色规则说明
-│       ├── image_mapping.md    # 关键词 -> 物理图片路径映射表
+│       ├── image_mapping.json  # 关键词 -> 物理图片路径映射表
 │       ├── highlight_rules.json # 正则提取的数值高亮规则
 │       ├── examples.md     # 转换输出排版样式参考示例
 │       ├── templates/      # 攻略模板
@@ -120,9 +120,9 @@ python3 scripts/publish.py -c test/test_optimization_wechat.html
 
 ### 1. 游戏更新了新道具/装备时
 1. 将新的图片素材保存至 `packs/danke/assets/img/` 相应的分类目录下。
-2. 打开 `packs/danke/image_mapping.md`，在表格中追加一行，定义关键词和物理相对路径，例如：
-   ```markdown
-   | **【月殇护手】** | `![月殇护手](packs/danke/assets/img/装备/ss手套-月殇护手.png)` | 新装备 |
+2. 打开 `packs/danke/image_mapping.json`，在字典中追加一项，定义关键词和物理相对路径，例如：
+   ```json
+   "月殇护手": "packs/danke/assets/img/装备/ss手套-月殇护手.png"
    ```
 
 ### 2. 更新或调整排版样式时

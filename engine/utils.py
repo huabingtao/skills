@@ -70,13 +70,14 @@ def ensure_placeholder_exists(placeholder_dir):
 
 def load_image_mapping(mapping_path):
     """
-    Parses image_mapping.md to build a dictionary of {keyword: image_path}.
+    Parses image_mapping.json (or legacy image_mapping.md) to build a dictionary of {keyword: image_path}.
 
-    The file is expected to contain Markdown table rows of the form:
+    For JSON, the file is expected to be a simple dictionary mapping keys to values.
+    For legacy markdown, it is expected to contain Markdown table rows of the form:
         | **【keyword】** | `![alt](path)` |
 
     Args:
-        mapping_path: Absolute path to the image_mapping.md file.
+        mapping_path: Absolute path to the image_mapping.json/md file.
 
     Returns:
         A dict mapping keyword strings to image path strings.
