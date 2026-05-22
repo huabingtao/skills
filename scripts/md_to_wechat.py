@@ -108,7 +108,7 @@ def apply_image_node_styles(img, params):
     elif img_type == 'float-right':
         inline_style = "float: right; width: 80px; height: 80px; margin: 5px 0 5px 15px; border-radius: 10px; border: 1px solid #eee; box-shadow: 0 2px 6px rgba(0,0,0,0.08); object-fit: cover;"
     elif img_type == 'avatar':
-        inline_style = "width: 30px; height: 30px; border-radius: 50%; vertical-align: middle; display: inline-block; margin: -2px 4px 0 4px; border: 1.5px solid #2c3e50; box-shadow: 0 2px 4px rgba(0,0,0,0.1); box-sizing: border-box; object-fit: cover;"
+        inline_style = "width: 30px; height: 30px; vertical-align: middle; display: inline-block; margin: -2px 4px 0 4px; border: 1.5px solid #2c3e50; box-shadow: 0 2px 4px rgba(0,0,0,0.1); box-sizing: border-box; object-fit: cover;"
     elif img_type == 'icon' or params.get('icon') == 'card':
         inline_style = "width: 24px; height: 24px; vertical-align: middle; display: inline-block; margin: -2px 4px 0 4px; object-fit: cover;"
     else:
