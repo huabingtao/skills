@@ -20,6 +20,37 @@ from engine.publisher import main as publisher_main
 from scripts.compile import load_project_config, build_default_config
 
 
+def is_attribute_mention(text_after):
+    text_after = text_after.strip()
+    if text_after.startswith('的'):
+        text_after = text_after[1:].strip()
+    
+    # Extract continuous alphanumeric/Chinese characters (stop at punctuation or space)
+    match = re.match(r'^[\u4e00-\u9fa5a-zA-Z0-9]+', text_after)
+    if not match:
+        return False
+    
+    word_block = match.group(0)
+    
+    suffixes = [
+        '数量', '伤害', '属性', '等级', '增益', '百分比', '加成', '词条', '效果', 
+        '时间', '频率', '速度', '范围', '冷却', 'cd', 'CD', '同步率', '共鸣', 
+        '同步', '血脉', '充能', '层数', '目标', '系数', '减伤', '控场', '爆发', '上限',
+        '攻击', '生命', '防御', '增伤', '减伤', '暴击', '暴击率', '命中率', '闪避率',
+        '回复', '治疗', '盾伤', '吸血', '穿透', '攻速', '移速'
+    ]
+    for s in suffixes:
+        idx = word_block.find(s)
+        if idx != -1 and idx <= 3:
+            return True
+    return False
+
+
+def is_in_header(chunk, start):
+    line_start = chunk.rfind('\n', 0, start) + 1
+    return chunk[line_start:start].lstrip().startswith('#')
+
+
 def run_stage_1(input_path, output_path, highlight_rules_path, image_mapping_path):
     print("\n🚀 [Stage 1/4] 正在进行文本整理与数值高亮...")
     if not os.path.exists(input_path):
@@ -56,36 +87,78 @@ def run_stage_1(input_path, output_path, highlight_rules_path, image_mapping_pat
         # Filter and sort keys by length descending to match longer keywords first
         sorted_keys = sorted([k for k in mapping.keys() if len(k.strip()) >= 2], key=len, reverse=True)
         
+        GENERIC_KEYWORDS = {'无人机', '导弹', '雷电', '燃烧瓶', '足球', '钻头', '激光', '守卫者', '榴莲', '砖头', '回旋镖'}
+        
+        seen_keys = set()
+        
         for i in range(len(parts)):
             if i % 2 == 0:  # Plain text chunks
                 chunk = parts[i]
-                matches = []
-                occupied = []
                 
                 # Pre-mark already bolded/bracketed regions to avoid double-bolding
+                occupied = []
                 for pattern in [r'\*\*【[^】]+】\*\*', r'\*\*[^*]+\*\*', r'【[^】]+】']:
                     for m in re.finditer(pattern, chunk):
                         occupied.append((m.start(), m.end()))
                 
+                # Step A: Scan all occurrences of all keywords and mark them as occupied if they don't overlap.
+                # Sort by length of key descending so longer keywords match and occupy space first.
+                all_occurrences = []
                 for key in sorted_keys:
                     escaped_key = re.escape(key)
                     for m in re.finditer(escaped_key, chunk):
-                        start, end = m.start(), m.end()
-                        # Check overlaps
-                        overlap = False
-                        for o_start, o_end in occupied:
-                            if not (end <= o_start or start >= o_end):
-                                overlap = True
-                                break
-                        if not overlap:
-                            for m_start, m_end, _ in matches:
-                                if not (end <= m_start or start >= m_end):
-                                    overlap = True
-                                    break
-                        if not overlap:
-                            matches.append((start, end, key))
+                        all_occurrences.append((m.start(), m.end(), key))
                 
-                # Replace back-to-front to preserve offsets
+                # Sort occurrences: longest keys first, then by start position
+                all_occurrences.sort(key=lambda x: (len(x[2]), -x[0]), reverse=True)
+                
+                temp_occupied = []
+                valid_occurrences = []
+                for start, end, key in all_occurrences:
+                    # Check overlap
+                    overlap = False
+                    for o_start, o_end in temp_occupied:
+                        if not (end <= o_start or start >= o_end):
+                            overlap = True
+                            break
+                    if not overlap:
+                        temp_occupied.append((start, end))
+                        valid_occurrences.append((start, end, key))
+                
+                # Step B: Process the valid occurrences front-to-back to decide matches
+                valid_occurrences.sort(key=lambda x: x[0])
+                matches = []
+                for start, end, key in valid_occurrences:
+                    if is_in_header(chunk, start):
+                        continue
+                    if is_attribute_mention(chunk[end:]):
+                        continue
+                    
+                    # Check if already bolded in initial occupied list
+                    is_pre_bolded = False
+                    for o_start, o_end in occupied:
+                        if not (end <= o_start or start >= o_end):
+                            is_pre_bolded = True
+                            break
+                    
+                    if is_pre_bolded:
+                        if key not in ['黄星', '红星']:
+                            seen_keys.add(key)
+                        continue
+                    
+                    # If it is a generic keyword and not pre-bolded, do not auto-bold it
+                    if key in GENERIC_KEYWORDS:
+                        continue
+                    
+                    # Check first-occurrence only
+                    if key in seen_keys and key not in ['黄星', '红星']:
+                        continue
+                    
+                    # Add to matches list to bold
+                    matches.append((start, end, key))
+                    seen_keys.add(key)
+                
+                # Sort matches back-to-front to perform replacement
                 matches.sort(key=lambda x: x[0], reverse=True)
                 for start, end, key in matches:
                     chunk = chunk[:start] + f"**【{key}】**" + chunk[end:]
@@ -126,65 +199,91 @@ def run_stage_2(input_path, output_path, image_mapping_path):
         
         sorted_keys = sorted([k for k in mapping.keys() if len(k.strip()) >= 2], key=len, reverse=True)
         
+        GENERIC_KEYWORDS = {'无人机', '导弹', '雷电', '燃烧瓶', '足球', '钻头', '激光', '守卫者', '榴莲', '砖头', '回旋镖'}
+        
+        seen_keys = set()
+        
         for i in range(len(parts)):
             if i % 2 == 0:  # Plain text
                 chunk = parts[i]
-                matches = []
-                occupied = []
                 
+                # Step A: Scan all occurrences of **【key】** or key for all keywords to mark occupied
+                all_occurrences = []
                 for key in sorted_keys:
                     escaped_key = re.escape(key)
-                    # We match either **【key】** or key
-                    pattern = re.compile(rf'\*\*【{escaped_key}】\*\*|{escaped_key}')
+                    if key in GENERIC_KEYWORDS:
+                        pattern = re.compile(rf'\*\*【{escaped_key}】\*\*|\*\*{escaped_key}\*\*|【{escaped_key}】')
+                    else:
+                        pattern = re.compile(rf'\*\*【{escaped_key}】\*\*|{escaped_key}')
                     for m in pattern.finditer(chunk):
-                        start, end = m.start(), m.end()
+                        all_occurrences.append((m.start(), m.end(), key, m.group(0)))
+                
+                # Sort occurrences: longest keys first
+                all_occurrences.sort(key=lambda x: (len(x[2]), -x[0]), reverse=True)
+                
+                temp_occupied = []
+                valid_occurrences = []
+                for start, end, key, matched_str in all_occurrences:
+                    # Check overlap
+                    overlap = False
+                    for o_start, o_end in temp_occupied:
+                        if not (end <= o_start or start >= o_end):
+                            overlap = True
+                            break
+                    if not overlap:
+                        temp_occupied.append((start, end))
+                        valid_occurrences.append((start, end, key, matched_str))
+                
+                # Step B: Process the valid occurrences front-to-back to decide matches
+                valid_occurrences.sort(key=lambda x: x[0])
+                matches = []
+                for start, end, key, matched_str in valid_occurrences:
+                    if is_in_header(chunk, start):
+                        continue
+                    if is_attribute_mention(chunk[end:]):
+                        continue
                         
-                        # Check overlaps to prevent shorter keys matching inside longer matched/occupied keywords
-                        overlap = False
-                        for o_start, o_end in occupied:
-                            if not (end <= o_start or start >= o_end):
-                                overlap = True
-                                break
-                        if not overlap:
-                            for m_start, m_end, _, _ in matches:
-                                if not (end <= m_start or start >= m_end):
-                                    overlap = True
-                                    break
+                    already_has_image = False
+                    
+                    # Check if followed by a markdown image in the same chunk (ignoring bolding/brackets)
+                    remaining = chunk[end:].lstrip('*_【】 ')
+                    if remaining.startswith('!['):
+                        already_has_image = True
+                    
+                    # Check if followed by a markdown image in the next chunk
+                    if not remaining and i + 1 < len(parts):
+                        next_part = parts[i+1].lstrip('*_【】 ')
+                        if next_part.startswith('!['):
+                            already_has_image = True
+                    
+                    # Check if followed by a markdown image separated by a few connector words/chars (e.g. 的套装)
+                    in_between = chunk[end:].strip('*_【】 ')
+                    if not already_has_image and len(in_between) <= 5 and i + 1 < len(parts):
+                        next_tag = parts[i+1]
+                        if next_tag.startswith(f"![{key}]") or next_tag.startswith(f"![{key}("):
+                            already_has_image = True
+                            
+                    if already_has_image:
+                        if key not in ['黄星', '红星']:
+                            seen_keys.add(key)
+                        continue
                         
-                        if not overlap:
-                            occupied.append((start, end))
-                            already_has_image = False
-                            
-                            # Check if followed by a markdown image in the same chunk (ignoring bolding/brackets)
-                            remaining = chunk[end:].lstrip('*_【】 ')
-                            if remaining.startswith('!['):
-                                already_has_image = True
-                            
-                            # Check if followed by a markdown image in the next chunk
-                            if not remaining and i + 1 < len(parts):
-                                next_part = parts[i+1].lstrip('*_【】 ')
-                                if next_part.startswith('!['):
-                                    already_has_image = True
-                            
-                            # Check if followed by a markdown image separated by a few connector words/chars (e.g. 的套装)
-                            in_between = chunk[end:].strip('*_【】 ')
-                            if not already_has_image and len(in_between) <= 5 and i + 1 < len(parts):
-                                next_tag = parts[i+1]
-                                if next_tag.startswith(f"![{key}]") or next_tag.startswith(f"![{key}("):
-                                    already_has_image = True
-                                    
-                            if not already_has_image:
-                                matched_str = m.group(0)
-                                if key in ['黄星', '红星']:
-                                    layout = '{type=icon}'
-                                else:
-                                    layout = '{type=avatar}'
-                                formatted_str = f"{matched_str}![{key}](img://{key}){layout}"
-                                matches.append((start, end, key, formatted_str))
-                                
+                    # Check first-occurrence only
+                    if key in seen_keys and key not in ['黄星', '红星']:
+                        continue
+                        
+                    if key in ['黄星', '红星']:
+                        layout = '{type=icon}'
+                    else:
+                        layout = '{type=avatar}'
+                    
+                    formatted_str = f"{matched_str}![{key}](img://{key}){layout}"
+                    matches.append((start, end, formatted_str))
+                    seen_keys.add(key)
+                
                 # Replace back-to-front to preserve offsets
                 matches.sort(key=lambda x: x[0], reverse=True)
-                for start, end, _, formatted_str in matches:
+                for start, end, formatted_str in matches:
                     chunk = chunk[:start] + formatted_str + chunk[end:]
                 parts[i] = chunk
                 
