@@ -9,3 +9,5 @@ node_modules/
 scripts/config.json
 .wechat_token_cache.json
 test/
+__pycache__/
+*.pyc

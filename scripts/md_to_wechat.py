@@ -5,6 +5,8 @@ import sys
 import os
 import yaml
 import json
+import argparse
+from bs4 import BeautifulSoup
 
 def load_image_mapping(mapping_path):
     """
@@ -14,8 +16,6 @@ def load_image_mapping(mapping_path):
     if not os.path.exists(mapping_path):
         return mapping
         
-    # Regular expression to extract the key name and image path from the Markdown table row.
-    # Matches: | **【双绝枪】** | `![双绝枪](assets/img/装备/ss武器-双绝枪-原始形态.png)` | ...
     line_pattern = re.compile(r'^\s*\|\s*(?:\*\*)?【?([^】\*]+)】?(?:\*\*)?\s*\|\s*`?!\s*\[[^\]]*\]\(([^)]+)\)`?\s*\|')
     
     try:
@@ -31,13 +31,112 @@ def load_image_mapping(mapping_path):
         
     return mapping
 
-def convert_to_wechat_html(md_content):
+def parse_css(css_content):
     """
-    Converts Markdown content to HTML with inline CSS styles optimized for WeChat Official Accounts.
-    Extracts Frontmatter if present.
+    Parses a CSS string into a list of (selector, declarations) tuples.
+    Preserves declaration order for cascading rules.
     """
-    metadata = {}
+    # Remove CSS comments
+    css_content = re.sub(r'/\*.*?\*/', '', css_content, flags=re.DOTALL)
     
+    rules = []
+    pattern = re.compile(r'([^{]+)\{([^}]+)\}')
+    for match in pattern.finditer(css_content):
+        selectors_raw = match.group(1).strip()
+        declarations = match.group(2).strip()
+        
+        # Normalize spaces
+        declarations = re.sub(r'\s+', ' ', declarations).strip()
+        if not declarations.endswith(';'):
+            declarations += ';'
+            
+        for selector in selectors_raw.split(','):
+            selector = selector.strip()
+            if selector:
+                rules.append((selector, declarations))
+    return rules
+
+def apply_css_theme(soup, theme_path):
+    """
+    Applies the CSS rules defined in theme_path to elements in the soup.
+    """
+    if not os.path.exists(theme_path):
+        print(f"⚠ Warning: Theme CSS file not found at: {theme_path}")
+        return
+        
+    try:
+        with open(theme_path, 'r', encoding='utf-8') as f:
+            css_content = f.read()
+            
+        css_rules = parse_css(css_content)
+        
+        for selector, new_style in css_rules:
+            try:
+                elements = soup.select(selector)
+                for elem in elements:
+                    existing_style = elem.get('style', '').strip()
+                    if existing_style:
+                        if not existing_style.endswith(';'):
+                            existing_style += ';'
+                        elem['style'] = f"{existing_style} {new_style}"
+                    else:
+                        elem['style'] = new_style
+            except Exception as e:
+                # Silently skip advanced/unsupported selectors in soup
+                pass
+    except Exception as e:
+        print(f"⚠ Warning: Error applying CSS theme: {e}")
+
+def apply_image_node_styles(img, params):
+    """
+    Applies style presets based on params (similar to previous layout system).
+    """
+    inline_style = ""
+    img_type = params.get('type')
+    if img_type == 'card':
+        inline_style = "display: block; margin: 20px auto; width: 90%; max-width: 100%; border-radius: 12px; box-shadow: 0 10px 20px rgba(0,0,0,0.1); border: 1px solid #eee;"
+    elif img_type == 'banner':
+        inline_style = "display: block; margin: 20px auto; width: 100%; max-width: 100%; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.08);"
+    elif img_type == 'grid2':
+        inline_style = "width: 48%; display: inline-block; margin: 10px 1%; vertical-align: middle; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.06); border: 1px solid #eee; box-sizing: border-box;"
+    elif img_type == 'grid3':
+        inline_style = "width: 31.3%; display: inline-block; margin: 10px 1%; vertical-align: middle; border-radius: 6px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); border: 1px solid #eee; box-sizing: border-box;"
+    elif img_type == 'grid4':
+        inline_style = "width: 23%; display: inline-block; margin: 10px 1%; vertical-align: middle; border-radius: 6px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); border: 1px solid #eee; box-sizing: border-box;"
+    elif img_type == 'float-left':
+        inline_style = "float: left; width: 80px; height: 80px; margin: 5px 15px 5px 0; border-radius: 10px; border: 1px solid #eee; box-shadow: 0 2px 6px rgba(0,0,0,0.08); object-fit: cover;"
+    elif img_type == 'float-right':
+        inline_style = "float: right; width: 80px; height: 80px; margin: 5px 0 5px 15px; border-radius: 10px; border: 1px solid #eee; box-shadow: 0 2px 6px rgba(0,0,0,0.08); object-fit: cover;"
+    elif img_type == 'avatar':
+        inline_style = "width: 30px; height: 30px; border-radius: 50%; vertical-align: middle; display: inline-block; margin: -2px 4px 0 4px; border: 1.5px solid #2c3e50; box-shadow: 0 2px 4px rgba(0,0,0,0.1); box-sizing: border-box; object-fit: cover;"
+    elif img_type == 'icon' or params.get('icon') == 'card':
+        inline_style = "width: 24px; height: 24px; vertical-align: middle; display: inline-block; margin: -2px 4px 0 4px; object-fit: cover;"
+    else:
+        if 'w' in params:
+            inline_style += f"width: {params['w']}; "
+        if 'h' in params:
+            inline_style += f"height: {params['h']}; "
+            
+    if 'pd' in params:
+        inline_style += f"padding: {params['pd']}px; box-sizing: border-box; "
+
+    if inline_style:
+        existing_style = img.get('style', '').strip()
+        if existing_style:
+            if not existing_style.endswith(';'):
+                existing_style += ';'
+            img['style'] = f"{existing_style} {inline_style}"
+        else:
+            img['style'] = inline_style
+
+def convert_to_wechat_html(md_content, theme_name='default'):
+    """
+    Converts Markdown content to HTML with inline CSS styles optimized for WeChat.
+    """
+    # 1. Preprocess Ruby Annotations: [文字]{注音} -> <ruby>文字<rt>注音</rt></ruby>
+    md_content = re.sub(r'\[([^\]\n]+)\]\{([^\}\n]+)\}', r'<ruby>\1<rt>\2</rt></ruby>', md_content)
+
+    metadata = {}
     # Extract Frontmatter
     if md_content.startswith('---'):
         parts = re.split(r'^---', md_content, maxsplit=2, flags=re.MULTILINE)
@@ -53,176 +152,158 @@ def convert_to_wechat_html(md_content):
     mapping_file = os.path.abspath(os.path.join(script_dir, '../references/image_mapping.md'))
     image_mapping = load_image_mapping(mapping_file)
 
-    # Enable common extensions
-    # 'fenced_code' for ``` blocks, 'tables' for table support, 'nl2br' for newline handling
+    # Render Markdown to raw HTML
     extensions = ['fenced_code', 'tables', 'nl2br', 'toc']
     html = markdown.markdown(md_content, extensions=extensions)
-    
-    # (Rest of styles definition unchanged...)
-    styles = {
-        'h1': 'style="font-size: 1.6em; font-weight: bold; border-bottom: 2px solid #2c3e50; padding-bottom: 10px; margin-top: 30px; margin-bottom: 20px; color: #2c3e50;"',
-        'h2': 'style="font-size: 1.4em; font-weight: bold; border-left: 6px solid #2c3e50; padding-left: 12px; margin-top: 25px; margin-bottom: 15px; color: #2c3e50; background-color: #f8f9fa; padding-top: 5px; padding-bottom: 5px;"',
-        'h3': 'style="font-size: 1.2em; font-weight: bold; margin-top: 20px; margin-bottom: 10px; color: #34495e;"',
-        'p': 'style="margin: 15px 0; line-height: 1.8; color: #333; font-size: 16px; text-align: justify; word-break: break-word;"',
-        'code': 'style="font-family: Consolas, Monaco, \'Andale Mono\', \'Ubuntu Mono\', monospace; background-color: #f3f4f5; color: #e74c3c; padding: 2px 6px; border-radius: 4px; font-size: 0.9em; margin: 0 2px;"',
-        'pre': 'style="background-color: #282c34; color: #abb2bf; padding: 18px; border-radius: 10px; overflow-x: auto; margin: 22px 0; line-height: 1.5; font-size: 14px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"',
-        'pre_code': 'style="background: none; color: inherit; padding: 0; border-radius: 0; font-family: Consolas, Monaco, \'Andale Mono\', \'Ubuntu Mono\', monospace;"',
-        'ul': 'style="padding-left: 25px; margin: 15px 0; list-style-type: disc;"',
-        'ol': 'style="padding-left: 25px; margin: 15px 0; list-style-type: decimal;"',
-        'li': 'style="margin-bottom: 10px; line-height: 1.7; color: #333;"',
-        'table': 'style="width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px; border: 1px solid #dfe2e5; border-radius: 6px; overflow: hidden;"',
-        'th': 'style="background-color: #f6f8fa; border: 1px solid #dfe2e5; padding: 10px 15px; font-weight: bold; text-align: center; color: #24292e;"',
-        'td': 'style="border: 1px solid #dfe2e5; padding: 10px 15px; text-align: left; color: #24292e;"',
-        'blockquote': 'style="border-left: 5px solid #dfe2e5; color: #6a737d; padding: 12px 20px; margin: 22px 0; background-color: #fafbfc; border-radius: 0 6px 6px 0;"',
-        'hr': 'style="height: 2px; padding: 0; margin: 30px 0; background-color: #e1e4e8; border: 0;"',
-        'strong': 'style="font-weight: bold;"'
-    }
 
-    # Apply styles using regex
-    # We use a pattern that matches the start tag and any existing attributes
-    def add_style(match, style):
-        tag_start = match.group(1)
-        attributes = match.group(2)
-        # If style already exists, we might need a more complex merge, but for now we append
-        return f'<{tag_start} {style} {attributes}>'
+    # Convert <font color="..."> (from strategy rules) to <span style="color: ...">
+    html = re.sub(r'<font\s+[^>]*?color=["\'](.*?)["\']\s*>(.*?)</font>', 
+                  r'<span style="color: \1; font-weight: bold;">\2</span>', 
+                  html, flags=re.IGNORECASE)
 
-    # Headers
-    html = re.sub(r'<(h1)([^>]*)>', lambda m: add_style(m, styles['h1']), html)
-    html = re.sub(r'<(h2)([^>]*)>', lambda m: add_style(m, styles['h2']), html)
-    html = re.sub(r'<(h3)([^>]*)>', lambda m: add_style(m, styles['h3']), html)
-    
-    # Text and lists
-    html = re.sub(r'<(p)([^>]*)>', lambda m: add_style(m, styles['p']), html)
-    html = re.sub(r'<(ul)([^>]*)>', lambda m: add_style(m, styles['ul']), html)
-    html = re.sub(r'<(ol)([^>]*)>', lambda m: add_style(m, styles['ol']), html)
-    html = re.sub(r'<(li)([^>]*)>', lambda m: add_style(m, styles['li']), html)
-    html = re.sub(r'<(blockquote)([^>]*)>', lambda m: add_style(m, styles['blockquote']), html)
-    html = re.sub(r'<hr />', f'<hr {styles["hr"]}>', html)
-    html = re.sub(r'<(strong)([^>]*)>', lambda m: add_style(m, styles['strong']), html)
-    
-    # Tables
-    html = re.sub(r'<(table)([^>]*)>', lambda m: add_style(m, styles['table']), html)
-    html = re.sub(r'<(th)([^>]*)>', lambda m: add_style(m, styles['th']), html)
-    html = re.sub(r'<(td)([^>]*)>', lambda m: add_style(m, styles['td']), html)
+    # Parse with BeautifulSoup for structural modifications
+    soup = BeautifulSoup(html, 'html.parser')
 
-    # Code Blocks (pre > code)
-    # The markdown library usually generates <pre><code class="language-python">...</code></pre>
-    html = re.sub(r'<(pre)([^>]*)>', lambda m: add_style(m, styles['pre']), html)
-    
-    # Special handling for <code> to distinguish between inline and block
-    # 1. Apply styles to ALL code tags
-    html = re.sub(r'<(code)([^>]*)>', lambda m: add_style(m, styles['code']), html)
-    
-    # 2. Re-apply styles to code tags that are children of pre (fix the ones we just broke)
-    # We look for <pre ...><code ... style="..."> and replace the style
-    html = re.sub(rf'(<pre[^>]*>)\s*<code([^>]*) {styles["code"]} ([^>]*)>', 
-                  rf'\1<code\2 {styles["pre_code"]} \3>', html)
+    # Apply CSS Theme stylesheets
+    theme_path = os.path.abspath(os.path.join(script_dir, f'../references/themes/{theme_name}.css'))
+    apply_css_theme(soup, theme_path)
 
-    # Convert <font color="..."> (from Survivor.io strategy rules) to <span style="color: ...">
-    # This ensures better rendering consistency in modern WeChat views.
-    html = re.sub(r'<font\s+[^>]*?color=["\'](.*?)["\']\s*>(.*?)</font>', r'<span style="color: \1; font-weight: bold;">\2</span>', html, flags=re.IGNORECASE)
+    # Parse Custom Image Styles: image sibling `{type=...}` tags
+    for img in soup.find_all('img'):
+        sibling = img.next_sibling
+        if sibling and isinstance(sibling, str):
+            stripped_sibling = sibling.lstrip()
+            if stripped_sibling.startswith('{'):
+                match = re.match(r'^\{(.*?)\}', stripped_sibling)
+                if match:
+                    style_params = match.group(1)
+                    params = {}
+                    for p in style_params.split(';'):
+                        if '=' in p:
+                            k, v = p.split('=', 1)
+                            params[k.strip()] = v.strip()
+                            
+                    apply_image_node_styles(img, params)
+                    
+                    # Remove curly braces styling text from the text node
+                    # Keep any remaining trailing characters
+                    rest = stripped_sibling[match.end():]
+                    # Restore original leading space if any
+                    orig_space = sibling[:len(sibling)-len(stripped_sibling)]
+                    sibling.replace_with(orig_space + rest)
 
-    # Custom Image Styling Support: ![alt](src){style_params}
-    # We do this on the generated HTML to handle attributes correctly
-    def apply_image_styles(match):
-        img_tag = match.group(1)
-        style_params = match.group(2)
+    # Clean Image width/height attributes (convert them to inline styles)
+    for img in soup.find_all('img'):
+        width = img.get('width')
+        height = img.get('height')
         
-        # Parse params
-        params = {}
-        for p in style_params.split(';'):
-            if '=' in p:
-                k, v = p.split('=', 1)
-                params[k.strip()] = v.strip()
-        
-        inline_style = ""
-        img_type = params.get('type')
-        if img_type == 'card':
-            inline_style = "display: block; margin: 20px auto; width: 90%; max-width: 100%; border-radius: 12px; box-shadow: 0 10px 20px rgba(0,0,0,0.1); border: 1px solid #eee;"
-        elif img_type == 'banner':
-            inline_style = "display: block; margin: 20px auto; width: 100%; max-width: 100%; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.08);"
-        elif img_type == 'grid2':
-            inline_style = "width: 48%; display: inline-block; margin: 10px 1%; vertical-align: middle; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.06); border: 1px solid #eee; box-sizing: border-box;"
-        elif img_type == 'grid3':
-            inline_style = "width: 31.3%; display: inline-block; margin: 10px 1%; vertical-align: middle; border-radius: 6px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); border: 1px solid #eee; box-sizing: border-box;"
-        elif img_type == 'grid4':
-            inline_style = "width: 23%; display: inline-block; margin: 10px 1%; vertical-align: middle; border-radius: 6px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); border: 1px solid #eee; box-sizing: border-box;"
-        elif img_type == 'float-left':
-            inline_style = "float: left; width: 80px; height: 80px; margin: 5px 15px 5px 0; border-radius: 10px; border: 1px solid #eee; box-shadow: 0 2px 6px rgba(0,0,0,0.08); object-fit: cover;"
-        elif img_type == 'float-right':
-            inline_style = "float: right; width: 80px; height: 80px; margin: 5px 0 5px 15px; border-radius: 10px; border: 1px solid #eee; box-shadow: 0 2px 6px rgba(0,0,0,0.08); object-fit: cover;"
-        elif img_type == 'avatar':
-            inline_style = "width: 30px; height: 30px; border-radius: 50%; vertical-align: middle; display: inline-block; margin: -2px 4px 0 4px; border: 1.5px solid #2c3e50; box-shadow: 0 2px 4px rgba(0,0,0,0.1); box-sizing: border-box; object-fit: cover;"
-        elif img_type == 'icon' or params.get('icon') == 'card':
-            inline_style = "width: 24px; height: 24px; vertical-align: middle; display: inline-block; margin: -2px 4px 0 4px; object-fit: cover;"
-        else:
-            # Custom w/h
-            if 'w' in params:
-                inline_style += f"width: {params['w']}; "
-            if 'h' in params:
-                inline_style += f"height: {params['h']}; "
-        
-        # Add padding support (pd=2 -> padding: 2px;)
-        if 'pd' in params:
-            inline_style += f"padding: {params['pd']}px; box-sizing: border-box; "
-        
-        if inline_style:
-            if 'style="' in img_tag:
-                # Merge styles (simplistic)
-                return img_tag.replace('style="', f'style="{inline_style} ')
+        style_additions = []
+        if width:
+            img.attrs.pop('width', None)
+            width_str = f"{width}px" if width.isdigit() else width
+            style_additions.append(f"width: {width_str};")
+            
+        if height:
+            img.attrs.pop('height', None)
+            height_str = f"{height}px" if height.isdigit() else height
+            style_additions.append(f"height: {height_str};")
+            
+        if style_additions:
+            style_additions.append("object-fit: cover;")
+            new_styles = " ".join(style_additions)
+            existing_style = img.get('style', '').strip()
+            if existing_style:
+                if not existing_style.endswith(';'):
+                    existing_style += ';'
+                img['style'] = f"{existing_style} {new_styles}"
             else:
-                return img_tag.replace('<img', f'<img style="{inline_style}"')
-        
-        return img_tag
-
-    # Match <img ... />{style_params}
-    # Note: markdown library might wrap the style in a separate paragraph if there's a newline,
-    # but if it's on the same line it will be <img ... />{...}
-    # Allow optional whitespace before the curly braces
-    html = re.sub(r'(<img[^>]*?>)\s*\{(.*?)\}', apply_image_styles, html)
+                img['style'] = new_styles
 
     # Resolve all image paths intelligently (supporting img://, bare name, or partial paths)
-    def resolve_image_path(match):
-        original_src = match.group(1).strip()
-        
-        # Ignore external http/https URLs
-        if original_src.startswith('http://') or original_src.startswith('https://'):
-            return match.group(0)
+    for img in soup.find_all('img'):
+        src = img.get('src', '').strip()
+        if not src:
+            continue
+        if src.startswith(('http://', 'https://')):
+            continue
             
-        # Clean the src path (e.g. strip img:// prefix if present)
-        src_clean = original_src.replace('img://', '')
-        
-        # Extract the base key (e.g., "assets/img/装备/ss武器-双绝枪.png" -> "ss武器-双绝枪")
+        src_clean = src.replace('img://', '')
         base_name = os.path.basename(src_clean)
         key_name = os.path.splitext(base_name)[0]
         
-        # Try finding a path in image_mapping
         real_path = image_mapping.get(src_clean) or image_mapping.get(base_name) or image_mapping.get(key_name)
-        
         if real_path:
-            return f'src="{real_path}"'
+            img['src'] = real_path
         else:
-            # If not in mapping, keep as is but print warning only if it's not already a valid assets path
-            if not original_src.startswith('assets/'):
-                print(f"⚠ Warning: Image path not found in mapping dictionary for: {original_src}")
-            return match.group(0)
+            if not src.startswith('assets/'):
+                print(f"⚠ Warning: Image path not found in mapping dictionary for: {src}")
 
-    html = re.sub(r'src=["\']([^"\']+)["\']', resolve_image_path, html)
+    # Convert External Hyperlinks to Footnotes
+    external_links = []
+    for a in soup.find_all('a'):
+        href = a.get('href', '').strip()
+        text = a.get_text().strip()
+        
+        if not href or href.startswith('#') or 'mp.weixin.qq.com' in href:
+            continue
+            
+        # Deduplicate links to match the same index
+        existing_hrefs = [x['href'] for x in external_links]
+        if href in existing_hrefs:
+            index = existing_hrefs.index(href) + 1
+        else:
+            external_links.append({'href': href, 'title': text or href})
+            index = len(external_links)
+            
+        sup = soup.new_tag('sup')
+        sup.string = f"[{index}]"
+        a.append(sup)
+
+    if external_links:
+        # We append a divider
+        hr = soup.new_tag('hr')
+        soup.append(hr)
+        
+        h4 = soup.new_tag('h4')
+        h4.string = "引用链接"
+        soup.append(h4)
+        
+        for idx, link_info in enumerate(external_links, 1):
+            p = soup.new_tag('p')
+            p['style'] = "font-size: 14px; color: #888; line-height: 1.6; margin: 5px 0;"
+            
+            code = soup.new_tag('code')
+            code['style'] = "font-size: 90%; opacity: 0.6; background-color: #f3f4f5; padding: 2px 4px; border-radius: 4px;"
+            code.string = f"[{idx}]"
+            
+            p.append(code)
+            p.append(f" {link_info['title']}: ")
+            
+            i_tag = soup.new_tag('i')
+            i_tag['style'] = "word-break: break-all; color: #576b95;"
+            i_tag.string = link_info['href']
+            
+            p.append(i_tag)
+            soup.append(p)
+
+    final_html = str(soup)
 
     # Wrap in a modern WeChat-optimized responsive container
     container_style = 'font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, \'Helvetica Neue\', Arial, \'PingFang SC\', \'Hiragino Sans GB\', \'Microsoft YaHei\', sans-serif; padding: 15px; max-width: 100%; box-sizing: border-box; font-size: 16px; color: #333; line-height: 1.8; word-wrap: break-word; text-align: justify;'
-    wrapped_html = f'<div style="{container_style}">\n{html}\n</div>'
+    wrapped_html = f'<div style="{container_style}">\n{final_html}\n</div>'
 
     return wrapped_html, metadata
 
 def main():
-    if len(sys.argv) < 2:
-        print("Markdown to WeChat HTML Converter")
-        print("Usage: python md_to_wechat.py <input_file> [output_file]")
-        return
+    parser = argparse.ArgumentParser(description="Markdown to WeChat HTML Converter")
+    parser.add_argument("input_file", help="Path to the input Markdown file")
+    parser.add_argument("output_file", nargs="?", help="Path to the output HTML file (optional)")
+    parser.add_argument("--theme", default="default", help="Theme stylesheet name to use (default: default)")
 
-    input_path = sys.argv[1]
-    output_path = sys.argv[2] if len(sys.argv) > 2 else os.path.splitext(input_path)[0] + "_wechat.html"
+    args = parser.parse_args()
+
+    input_path = args.input_file
+    output_path = args.output_file if args.output_file else os.path.splitext(input_path)[0] + "_wechat.html"
     meta_path = os.path.splitext(output_path)[0] + ".json"
 
     if not os.path.exists(input_path):
@@ -233,7 +314,7 @@ def main():
         with open(input_path, 'r', encoding='utf-8') as f:
             content = f.read()
         
-        wechat_html, metadata = convert_to_wechat_html(content)
+        wechat_html, metadata = convert_to_wechat_html(content, theme_name=args.theme)
         
         # Save HTML
         with open(output_path, 'w', encoding='utf-8') as f:
@@ -241,10 +322,7 @@ def main():
             
         # Save Metadata
         if metadata:
-            # Handle date objects for JSON serialization
             def json_serial(obj):
-                if isinstance(obj, (yaml.constructor.SafeConstructor,)): # Not likely but for safety
-                     return str(obj)
                 import datetime
                 if isinstance(obj, (datetime.date, datetime.datetime)):
                     return obj.isoformat()
@@ -253,12 +331,13 @@ def main():
             with open(meta_path, 'w', encoding='utf-8') as f:
                 json.dump(metadata, f, ensure_ascii=False, indent=2, default=json_serial)
         
-        print(f"✅ Successfully converted '{input_path}' to '{output_path}'")
+        print(f"✅ Successfully converted '{input_path}' to '{output_path}' using theme '{args.theme}'")
         if metadata:
             print(f"✅ Metadata saved to '{meta_path}'")
-        print("Tip: You can now copy the content of the HTML file and paste it into the WeChat Official Account editor.")
     except Exception as e:
         print(f"❌ Error during conversion: {e}")
+        import traceback
+        traceback.print_exc()
 
 if __name__ == "__main__":
     main()

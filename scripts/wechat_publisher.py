@@ -5,12 +5,53 @@ import argparse
 import re
 import requests
 import tempfile
+import hashlib
 from wechat_api import WeChatClient
 
-def process_content_images(client, html_content, base_dir):
+CACHE_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), '../.wechat_image_cache.json'))
+
+def get_file_md5(file_path):
+    """
+    Computes the MD5 hash of a file.
+    """
+    if not os.path.exists(file_path) or not os.path.isfile(file_path):
+        return None
+    md5_hash = hashlib.md5()
+    try:
+        with open(file_path, "rb") as f:
+            for byte_block in iter(lambda: f.read(4096), b""):
+                md5_hash.update(byte_block)
+        return md5_hash.hexdigest()
+    except Exception as e:
+        print(f"  ⚠ Failed to compute MD5 for {file_path}: {e}")
+        return None
+
+def load_cache():
+    """
+    Loads MD5 cache from JSON.
+    """
+    if os.path.exists(CACHE_FILE):
+        try:
+            with open(CACHE_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {"content_images": {}, "thumb_materials": {}}
+
+def save_cache(cache):
+    """
+    Saves MD5 cache to JSON.
+    """
+    try:
+        with open(CACHE_FILE, 'w', encoding='utf-8') as f:
+            json.dump(cache, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"  ⚠ Failed to save cache: {e}")
+
+def process_content_images(client, html_content, base_dir, cache):
     """
     Finds all <img> tags, uploads local/remote images to WeChat CDN, 
-    and replaces the src attributes.
+    and replaces the src attributes. Utilizes MD5 caching to skip duplicate uploads.
     """
     # Pattern to find src in <img> tags
     img_pattern = r'<img([^>]*?)src=["\']([^"\']+)["\']([^>]*?)>'
@@ -62,11 +103,23 @@ def process_content_images(client, html_content, base_dir):
                     print(f"  ⚠ Local image not found: {src}")
                     return match.group(0)
 
+            # Compute MD5 and check cache
+            md5_val = get_file_md5(upload_path)
+            if md5_val and md5_val in cache["content_images"]:
+                wechat_url = cache["content_images"][md5_val]
+                print(f"  ⚡ Cache hit for {os.path.basename(upload_path)}: {wechat_url[:50]}...")
+                return f'<img{prefix}src="{wechat_url}"{suffix}>'
+
             # Upload to WeChat CDN
             print(f"  → Uploading to WeChat CDN: {os.path.basename(upload_path)}...")
             wechat_url = client.upload_content_image(upload_path)
             print(f"  ✅ Uploaded. URL: {wechat_url[:50]}...")
             
+            # Save to cache
+            if md5_val:
+                cache["content_images"][md5_val] = wechat_url
+                save_cache(cache)
+                
             return f'<img{prefix}src="{wechat_url}"{suffix}>'
             
         except Exception as e:
@@ -242,20 +295,29 @@ def main():
         sys.exit(0)
 
     client = WeChatClient(appid, appsecret)
+    cache = load_cache()
 
     try:
-        # 1. Upload Cover
-        print(f"→ Uploading cover: {os.path.basename(cover_path)}...")
-        thumb_media_id = client.upload_image(cover_path, is_thumb=True)
-        print(f"✅ Cover uploaded. MediaID: {thumb_media_id}")
+        # 1. Upload Cover (with Cache)
+        cover_md5 = get_file_md5(cover_path)
+        if cover_md5 and cover_md5 in cache["thumb_materials"]:
+            thumb_media_id = cache["thumb_materials"][cover_md5]
+            print(f"⚡ Cover cache hit. MediaID: {thumb_media_id}")
+        else:
+            print(f"→ Uploading cover: {os.path.basename(cover_path)}...")
+            thumb_media_id = client.upload_image(cover_path, is_thumb=True)
+            print(f"✅ Cover uploaded. MediaID: {thumb_media_id}")
+            if cover_md5:
+                cache["thumb_materials"][cover_md5] = thumb_media_id
+                save_cache(cache)
 
         # 2. Read Content
         with open(args.content, 'r', encoding='utf-8') as f:
             html_content = f.read()
             
-        # 3. Process and Upload content images
+        # 3. Process and Upload content images (with Cache)
         print("→ Processing content images...")
-        html_content = process_content_images(client, html_content, os.path.dirname(os.path.abspath(args.content)))
+        html_content = process_content_images(client, html_content, os.path.dirname(os.path.abspath(args.content)), cache)
 
         # 4. Create Draft
         print(f"→ Creating draft: '{title}'...")
