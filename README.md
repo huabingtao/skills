@@ -31,10 +31,13 @@
 - **`avatar`**：圆形角色头像（30px 圆形微标，带描边，适合特工/宠物行内展示，防拉伸变形）。
 - **`icon`**：普通行内小图标（24px 方形，行内垂直居中，防拉伸变形）。
 
-### 4. 微信公众号富文本适配 (WeChat HTML Compatibility)
-项目配备了格式转换工具 `scripts/md_to_wechat.py`：
-- **行内 CSS 注入**：将所有的 Markdown 标签转化为带有 inline CSS 样式的 HTML 标签，完美兼容微信公众平台后台的富文本渲染。
-- **高亮继承修复**：优化了 strong 标签的颜色覆盖问题，确保加粗文本在微信编辑器中能够 100% 继承外层的高亮色。
+### 4. 微信公众号富文本适配与自动化发布 (WeChat HTML & Publisher)
+项目配备了格式转换与一键发布工具集：
+- **CSS 主题解耦**：支持通过 `--theme` 参数加载 `references/themes/{theme_name}.css` 中的标准 CSS，不再硬编码，极大地方便了排版样式的定制和扩展。
+- **微信外链自动转脚注**：自动识别文章中的外部链接（如非 `mp.weixin.qq.com` 链接），转换成脚注 `<sup>[idx]</sup>` 并在文末生成格式美观的“引用链接”列表，完全适配微信对外部超链接的屏蔽规则。
+- **图片尺寸属性清洗**：自动剔除 HTML 中的 `width` 和 `height` 数值属性并转换为 `style` 行内宽高及 `object-fit: cover` 属性，彻底解决微信编辑器拉伸、压瘪图片的渲染 Bug。
+- **拼音注音 (Ruby) 语法**：提供 `[文字]{注音}` 转换至 `<ruby>文字<rt>注音</rt></ruby>` 的语法，使游戏名词或生僻字注音更方便。
+- **自动化发布与 MD5 缓存**：通过 `scripts/wechat_publisher.py` 可以直接将 HTML 一键发布为公众号后台的草稿，并在上传时利用本地 MD5 缓存（`.wechat_image_cache.json`）跳过重复上传的封面图和正文图片，节省微信 API 额度，大幅缩短二次发布的时间。
 
 ---
 
@@ -57,13 +60,18 @@
 ├── references/
 │   ├── formatting_rules.md # 文本排版与颜色规则说明
 │   ├── image_mapping.md    # 关键词 -> 物理图片路径映射表
-│   └── examples.md         # 转换输出排版样式参考示例
+│   ├── examples.md         # 转换输出排版样式参考示例
+│   └── themes/             # 排版主题 CSS 样式目录
+│       └── default.css     # 默认精美排版主题 CSS
 ├── scripts/
 │   ├── md_to_wechat.py     # Markdown 转微信公众号 HTML 转换器
+│   ├── wechat_api.py       # 封装的微信公众号接口客户端
+│   ├── wechat_publisher.py # 微信公众号一键草稿发布器
 │   └── config.json         # 公众号 API 配置文件（已在.gitignore中排除）
 └── test/
-    ├── test_images.md      # 多通用图片样式测试文稿
-    └── test_images_wechat.html # 转换后的微信 HTML 验证结果
+    ├── test_optimization.md      # 外链、注音、防拉伸测试文稿
+    ├── test_optimization_wechat.html # 转换后的微信 HTML 验证结果
+    └── test_caching.py     # 缓存逻辑单元测试脚本
 ```
 
 ---
@@ -77,15 +85,32 @@ pip install -r requirements.txt
 ```
 
 ### 2. 转换 Markdown 为微信公众号 HTML
-执行转换脚本，将写好的 Markdown 攻略转换为适配微信后台的 HTML 富文本：
+执行转换脚本，指定主题（默认为 `default`），将写好的 Markdown 攻略转换为适配微信后台的 HTML 富文本：
 ```bash
-python3 scripts/md_to_wechat.py <input_md_file> [output_html_file]
+python3 scripts/md_to_wechat.py <input_md_file> [output_html_file] --theme default
 ```
-- **示例**：
+* **示例**：
   ```bash
-  python3 scripts/md_to_wechat.py test/test_images.md
+  python3 scripts/md_to_wechat.py test/test_optimization.md --theme default
   ```
-  执行后会生成 `test/test_images_wechat.html`。打开此文件，直接复制代码粘贴到微信公众号推文编辑器中，即可实现无缝的精美排版和配图展示。
+  执行后会生成 `test/test_optimization_wechat.html` 及提取出的元数据 `test/test_optimization_wechat.json`。
+
+### 3. 一键发布至微信公众号草稿箱
+在首次使用或需要配置公众号 API 时，可运行测试连接命令并根据提示输入凭证：
+```bash
+python3 scripts/wechat_publisher.py --test-config
+```
+配置完成后，运行以下发布命令：
+```bash
+python3 scripts/wechat_publisher.py -c test/test_optimization_wechat.html
+```
+* **参数说明**：
+  - `-c, --content`：指定转换后的 HTML 文件路径（脚本会自动关联同名的 `.json` 元数据文件获取标题、封面等信息）。
+  - `-t, --title`：指定文章标题（若 HTML 对应的 JSON 中有 title 则可不填）。
+  - `--cover`：指定封面图片路径。
+  - `-a, --author`：指定作者（默认：`弹壳呱呱`）。
+
+执行后，脚本会先比对 MD5 缓存并上传未缓存的图片，然后一键创建草稿。成功后，可直接前往微信公众号后台的“草稿箱”查看与发布！
 
 ---
 
@@ -99,4 +124,4 @@ python3 scripts/md_to_wechat.py <input_md_file> [output_html_file]
    ```
 
 ### 2. 更新或调整排版样式时
-如果需要修改微信中各组件的默认字号、行高或颜色，可编辑 `scripts/md_to_wechat.py` 中 `styles` 字典下的内联样式配置。
+如果需要修改微信中各组件的默认字号、行高或颜色，无需修改任何 Python 逻辑，只需编辑 `references/themes/` 下对应的 `.css` 样式表文件（如 `default.css`）。转换引擎在编译时会自动读取对应的 CSS 选择器规则并内联至各个 HTML 标签。
