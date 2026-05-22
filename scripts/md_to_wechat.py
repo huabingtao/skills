@@ -136,13 +136,7 @@ def convert_to_wechat_html(md_content, theme_name='default'):
     # 1. Preprocess Ruby Annotations: [文字]{注音} -> <ruby>文字<rt>注音</rt></ruby>
     md_content = re.sub(r'\[([^\]\n]+)\]\{([^\}\n]+)\}', r'<ruby>\1<rt>\2</rt></ruby>', md_content)
 
-    # 2. Preprocess custom-styled links to images (e.g. [月殇护手](img://月殇护手){type=avatar} -> ![月殇护手](img://月殇护手){type=avatar})
-    # This automatically converts links with layout styles into image elements.
-    md_content = re.sub(
-        r'(?<!\!)\[([^\]\n]+)\]\(([^)\n]+)\)\s*(\{[a-zA-Z0-9_=\-\s;]+\})',
-        r'![\1](\2)\3',
-        md_content
-    )
+
 
     metadata = {}
     # Extract Frontmatter
