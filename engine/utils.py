@@ -8,6 +8,7 @@ import os
 import re
 import struct
 import zlib
+import json
 
 
 def scan_assets(assets_dir):
@@ -82,6 +83,14 @@ def load_image_mapping(mapping_path):
     """
     mapping = {}
     if not os.path.exists(mapping_path):
+        return mapping
+
+    if mapping_path.endswith('.json'):
+        try:
+            with open(mapping_path, 'r', encoding='utf-8') as f:
+                mapping = json.load(f)
+        except Exception as e:
+            print(f"⚠ Warning: Failed to parse JSON image mapping: {e}")
         return mapping
 
     line_pattern = re.compile(r'^\s*\|\s*(?:\*\*)?【?([^】\*]+)】?(?:\*\*)?\s*\|\s*`?!\s*\[[^\]]*\]\(([^)]+)\)`?\s*\|')

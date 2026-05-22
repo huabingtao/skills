@@ -3,7 +3,7 @@
   "description": "Survivor.io 游戏攻略内容包",
   "author": "弹壳呱呱",
 
-  "image_mapping": "image_mapping.md",
+  "image_mapping": "image_mapping.json",
   "assets_dir": "assets",
   "templates_dir": "templates",
 
