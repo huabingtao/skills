@@ -107,8 +107,8 @@ def apply_image_node_styles(img, params):
         inline_style = "float: left; width: 80px; height: 80px; margin: 5px 15px 5px 0; border-radius: 10px; border: 1px solid #eee; box-shadow: 0 2px 6px rgba(0,0,0,0.08); object-fit: cover;"
     elif img_type == 'float-right':
         inline_style = "float: right; width: 80px; height: 80px; margin: 5px 0 5px 15px; border-radius: 10px; border: 1px solid #eee; box-shadow: 0 2px 6px rgba(0,0,0,0.08); object-fit: cover;"
-    elif img_type == 'avatar':
-        inline_style = "width: 30px; height: 30px; vertical-align: middle; display: inline-block; margin: -2px 4px 0 4px; border: 1.5px solid #2c3e50; box-shadow: 0 2px 4px rgba(0,0,0,0.1); box-sizing: border-box; object-fit: cover;"
+    elif img_type in ('avatar', 'acatar'):
+        inline_style = "width: 30px; height: 30px; vertical-align: middle; display: inline-block; margin: -2px 4px 0 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); box-sizing: border-box; object-fit: cover;"
     elif img_type == 'icon' or params.get('icon') == 'card':
         inline_style = "width: 24px; height: 24px; vertical-align: middle; display: inline-block; margin: -2px 4px 0 4px; object-fit: cover;"
     else:
@@ -136,6 +136,14 @@ def convert_to_wechat_html(md_content, theme_name='default'):
     # 1. Preprocess Ruby Annotations: [文字]{注音} -> <ruby>文字<rt>注音</rt></ruby>
     md_content = re.sub(r'\[([^\]\n]+)\]\{([^\}\n]+)\}', r'<ruby>\1<rt>\2</rt></ruby>', md_content)
 
+    # 2. Preprocess custom-styled links to images (e.g. [月殇护手](img://月殇护手){type=avatar} -> ![月殇护手](img://月殇护手){type=avatar})
+    # This automatically converts links with layout styles into image elements.
+    md_content = re.sub(
+        r'(?<!\!)\[([^\]\n]+)\]\(([^)\n]+)\)\s*(\{[a-zA-Z0-9_=\-\s;]+\})',
+        r'![\1](\2)\3',
+        md_content
+    )
+
     metadata = {}
     # Extract Frontmatter
     if md_content.startswith('---'):
@@ -151,6 +159,17 @@ def convert_to_wechat_html(md_content, theme_name='default'):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     mapping_file = os.path.abspath(os.path.join(script_dir, '../references/image_mapping.md'))
     image_mapping = load_image_mapping(mapping_file)
+
+    # Resolve metadata cover image if it exists in frontmatter
+    cover = metadata.get('image')
+    if cover:
+        cover_clean = cover.replace('img://', '').replace('[占位图:', '').replace('[占位图', '').replace(']', '').strip()
+        cover_clean = cover_clean.lstrip(':').strip()
+        base_name = os.path.basename(cover_clean)
+        key_name = os.path.splitext(base_name)[0]
+        real_path = image_mapping.get(cover_clean) or image_mapping.get(base_name) or image_mapping.get(key_name)
+        if real_path:
+            metadata['image'] = real_path
 
     # Render Markdown to raw HTML
     extensions = ['fenced_code', 'tables', 'nl2br', 'toc']
