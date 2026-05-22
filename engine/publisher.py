@@ -131,8 +131,21 @@ def process_content_images(client, html_content, base_dir, cache, cache_file):
                         break
                     
                 if not upload_path:
+                    # Recursive search fallback under project_root
+                    norm_src = clean_src.replace('\\', '/')
+                    for r, d, files in os.walk(project_root):
+                        for f in files:
+                            full_f = os.path.join(r, f).replace('\\', '/')
+                            if full_f.endswith(norm_src):
+                                upload_path = os.path.join(r, f)
+                                break
+                        if upload_path:
+                            break
+
+                if not upload_path:
                     print(f"  ⚠ Local image not found: {src}")
                     return match.group(0)
+
 
             # Compute MD5 and check cache
             md5_val = get_file_md5(upload_path)
@@ -298,6 +311,19 @@ def main():
                 if os.path.exists(path):
                     cover_path = path
                     break
+
+            if not os.path.exists(cover_path):
+                # Recursive search fallback under project_root
+                norm_cover = cover_path.replace('\\', '/')
+                for r, d, files in os.walk(project_root):
+                    for f in files:
+                        full_f = os.path.join(r, f).replace('\\', '/')
+                        if full_f.endswith(norm_cover):
+                            cover_path = os.path.join(r, f)
+                            break
+                    if os.path.exists(cover_path):
+                        break
+
 
     if not title:
         print("❌ Error: Article title is required. Provide via --title or Frontmatter.")
