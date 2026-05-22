@@ -171,6 +171,65 @@ class WeChatClient:
         
         return result["media_id"]
 
+    def update_draft(self, 
+                     media_id: str, 
+                     title: str, 
+                     html_content: str, 
+                     thumb_media_id: str, 
+                     index: int = 0,
+                     author: str = "Admin",
+                     digest: str = "",
+                     show_cover_pic: int = 1) -> None:
+        """
+        Updates an existing draft in the WeChat Official Account.
+        
+        Args:
+            media_id: The media_id of the draft to update.
+            title: Article title.
+            html_content: Converted HTML content.
+            thumb_media_id: MediaID of the uploaded cover image.
+            index: The index of the article in the draft (0-based).
+            author: Article author.
+            digest: Article summary (optional).
+            show_cover_pic: 1 to show cover in article, 0 to hide.
+        """
+        token = self.get_access_token()
+        url = f"{self.BASE_URL}/draft/update?access_token={token}"
+        
+        # Update structure
+        update_data = {
+            "media_id": media_id,
+            "index": index,
+            "articles": {
+                "title": title,
+                "author": author,
+                "digest": digest,
+                "content": html_content,
+                "thumb_media_id": thumb_media_id,
+                "show_cover_pic": show_cover_pic,
+                "need_open_comment": 0,
+                "only_fans_can_comment": 0
+            }
+        }
+        
+        # Send request
+        payload = json.dumps(update_data, ensure_ascii=False).encode('utf-8')
+        headers = {'Content-Type': 'application/json; charset=utf-8'}
+        
+        response = requests.post(url, data=payload, headers=headers)
+        result = response.json()
+        
+        if result.get("errcode", 0) != 0:
+            # Handle token expiration and retry once
+            if result.get("errcode") in [40001, 42001]:
+                token = self.get_access_token(force_refresh=True)
+                url = f"{self.BASE_URL}/draft/update?access_token={token}"
+                response = requests.post(url, data=payload, headers=headers)
+                result = response.json()
+            
+            if result.get("errcode", 0) != 0:
+                raise Exception(f"Failed to update draft: {result.get('errmsg')} (Code: {result.get('errcode')})")
+
 # --- Usage Example ---
 if __name__ == "__main__":
     # Load credentials from environment or config

@@ -48,6 +48,25 @@ def save_cache(cache):
     except Exception as e:
         print(f"  ⚠ Failed to save cache: {e}")
 
+DRAFT_CACHE_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), '../.wechat_draft_cache.json'))
+
+def load_draft_cache():
+    if os.path.exists(DRAFT_CACHE_FILE):
+        try:
+            with open(DRAFT_CACHE_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+def save_draft_cache(cache):
+    try:
+        with open(DRAFT_CACHE_FILE, 'w', encoding='utf-8') as f:
+            json.dump(cache, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"  ⚠ Failed to save draft cache: {e}")
+
+
 def process_content_images(client, html_content, base_dir, cache):
     """
     Finds all <img> tags, uploads local/remote images to WeChat CDN, 
@@ -186,6 +205,7 @@ def main():
     parser.add_argument("--appid", help="WeChat AppID (overrides config)")
     parser.add_argument("--secret", help="WeChat AppSecret (overrides config)")
     parser.add_argument("--test-config", action="store_true", help="Validate WeChat API configuration and credentials without publishing")
+    parser.add_argument("--new", action="store_true", help="Force creating a new draft even if a cached draft exists")
 
     args = parser.parse_args()
 
@@ -279,6 +299,10 @@ def main():
             print("❌ Error: WeChat credentials are required to proceed.")
             sys.exit(1)
 
+    html_abs_path = os.path.abspath(args.content)
+    draft_cache = load_draft_cache()
+    existing_media_id = None if args.new else draft_cache.get(html_abs_path)
+
     # Confirmation Prompt
     print("\n" + "="*50)
     print("🚀 PRE-FLIGHT CHECK")
@@ -287,6 +311,10 @@ def main():
     print(f"Author: {author}")
     print(f"Cover:  {cover_path}")
     print(f"HTML:   {args.content}")
+    if existing_media_id:
+        print(f"Action: Update existing draft (MediaID: {existing_media_id})")
+    else:
+        print(f"Action: Create new draft")
     print("="*50)
     
     confirm = input("\nReady to push to WeChat Official Account Drafts? (y/n): ")
@@ -319,21 +347,65 @@ def main():
         print("→ Processing content images...")
         html_content = process_content_images(client, html_content, os.path.dirname(os.path.abspath(args.content)), cache)
 
-        # 4. Create Draft
-        print(f"→ Creating draft: '{title}'...")
+        # 4. Create/Update Draft
         digest = metadata.get('summary') or metadata.get('digest') or ""
-        draft_media_id = client.create_draft(
-            title=title,
-            html_content=html_content,
-            thumb_media_id=thumb_media_id,
-            author=author,
-            digest=digest
-        )
-        
-        print("\n" + "="*40)
-        print("🚀 PUBLISH SUCCESSFUL!")
-        print(f"Draft MediaID: {draft_media_id}")
-        print("="*40)
+        if existing_media_id:
+            try:
+                print(f"→ Updating draft '{title}' with MediaID: {existing_media_id}...")
+                client.update_draft(
+                    media_id=existing_media_id,
+                    title=title,
+                    html_content=html_content,
+                    thumb_media_id=thumb_media_id,
+                    author=author,
+                    digest=digest
+                )
+                draft_media_id = existing_media_id
+                print("\n" + "="*40)
+                print("🚀 DRAFT UPDATE SUCCESSFUL!")
+                print(f"Draft MediaID: {draft_media_id}")
+                print("="*40)
+            except Exception as e:
+                if "invalid media_id" in str(e).lower() or "40007" in str(e):
+                    print(f"\n⚠ Warning: Existing draft MediaID {existing_media_id} not found (may have been deleted).")
+                    fallback = input("Create a new draft instead? (y/n): ")
+                    if fallback.lower() == 'y':
+                        print(f"→ Creating draft: '{title}'...")
+                        draft_media_id = client.create_draft(
+                            title=title,
+                            html_content=html_content,
+                            thumb_media_id=thumb_media_id,
+                            author=author,
+                            digest=digest
+                        )
+                        draft_cache[html_abs_path] = draft_media_id
+                        save_draft_cache(draft_cache)
+                        print("\n" + "="*40)
+                        print("🚀 DRAFT CREATION SUCCESSFUL!")
+                        print(f"Draft MediaID: {draft_media_id}")
+                        print("="*40)
+                    else:
+                        raise e
+                else:
+                    raise e
+        else:
+            print(f"→ Creating draft: '{title}'...")
+            draft_media_id = client.create_draft(
+                title=title,
+                html_content=html_content,
+                thumb_media_id=thumb_media_id,
+                author=author,
+                digest=digest
+            )
+            # Save to cache
+            draft_cache[html_abs_path] = draft_media_id
+            save_draft_cache(draft_cache)
+            
+            print("\n" + "="*40)
+            print("🚀 DRAFT CREATION SUCCESSFUL!")
+            print(f"Draft MediaID: {draft_media_id}")
+            print("="*40)
+            
         print("您现在可以前往微信公众号后台“草稿箱”查看。")
 
     except Exception as e:
