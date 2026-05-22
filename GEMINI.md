@@ -14,9 +14,9 @@
 
 ## 使用与实现指南
 1.  **格式化逻辑：**
-    - 使用 `references/formatting_rules.md` 进行语义化颜色编码。
-    - 使用 `references/image_mapping.md` 注入相关的游戏素材（PNG/WebP）。
-    - **微信公众号适配**：项目包含 `scripts/md_to_wechat.py` 脚本，可将美化后的 Markdown 转换为带有行内 CSS 的 HTML，完美适配微信公众号后台。
+    - 使用内容包 `packs/danke/formatting_rules.md` 进行语义化颜色编码。
+    - 使用内容包 `packs/danke/image_mapping.md` 注入相关的游戏素材（PNG/WebP）。
+    - **微信公众号适配**：项目包含通用排版引擎 `engine/`，可通过 `scripts/compile.py --pack packs/danke <input_md_file>` 将美化后的 Markdown 转换为带有行内 CSS 的 HTML，完美适配微信公众号后台。
 
 2.  **内容完整性：**
     - 必须保留用户原始的策略建议和事实。
@@ -26,6 +26,6 @@
 - **Markdown 转微信 HTML**：
   ```bash
   pip install -r requirements.txt
-  python scripts/md_to_wechat.py <input_md_file>
+  python scripts/compile.py --pack packs/danke <input_md_file>
   ```
   该脚本会生成一个同名的 `_wechat.html` 文件，包含技术博客风格的行内样式，可直接粘贴至公众号编辑器。

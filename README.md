@@ -1,23 +1,23 @@
-# 弹壳特攻队攻略美化助手 (danke-strategy-skill)
+# 弹壳特攻队攻略美化与通用排版助手 (danke-strategy-skill)
 
-这是一个专为《弹壳特攻队》(Survivor.io) 设计的 **Gemini CLI 技能包**。它作为一个高效、专业的 **“攻略美化引擎”**，旨在将粗糙的原始攻略转化为排版精美、带自动配图、符合微信公众号后台发布标准的专业图文稿。
+这是一个专为《弹壳特攻队》(Survivor.io) 设计的 **Gemini CLI 技能包与排版引擎**。它由一个通用的 Markdown-to-WeChat 排版引擎（`engine/`）和具体的游戏内容包（`packs/danke/`）组成，能将粗糙的原始攻略转化为排版精美、带自动配图、符合微信公众号后台发布标准的专业图文稿。
 
 ---
 
 ## 🌟 核心功能
 
 ### 1. 自动化排版美化 (Text Beautification)
-根据 [formatting_rules.md](references/formatting_rules.md) 定义的规则，自动执行：
+根据内容包定义的规则，自动执行：
 - **关键词强调**：所有装备、技能、道具名称自动包裹为 `**【关键词】**`。
-- **数值高亮 (HTML Color)**：
+- **数值高亮 (HTML Color)**：由内容包 `highlight_rules.json` 正则动态配置。例如在弹壳攻略中：
   - <font color="#FF4D4F">**攻击/伤害/暴击类**</font>数值自动标红。
   - <font color="#1890FF">**生命/防御/减伤类**</font>数值自动标蓝。
   - <font color="#52C41A">**冷却/范围/异常类**</font>数值自动标绿。
 
 ### 2. 智能免路径配图 (Path-Free Image Resolution)
-内置强大的图片映射字典 [image_mapping.md](references/image_mapping.md)，提供便捷的免路径配图机制：
+通过内容包内置的图片映射字典 `image_mapping.md`，提供便捷的免路径配图机制：
 - **宽泛名称匹配**：用户在 Markdown 中无需记忆和书写复杂的本地绝对路径，可以直接书写裸名（如 `![等离子剑](等离子剑)`）或带后缀名（如 `![双生导弹](双生导弹.png)`）或使用虚拟协议 `![双绝枪](img://双绝枪)`。
-- **字典自动检索**：转换脚本会自动提取名称，去字典中智能匹配为真实本地素材相对路径（如 `assets/img/收藏品/等离子剑.png`）。
+- **字典自动检索**：转换脚本会自动提取名称，去字典中智能匹配为真实本地素材物理路径（如 `packs/danke/assets/img/收藏品/等离子剑.png`）。
 - **外部链接智能放行**：对 `http://` 或 `https://` 的外网图片链接自动忽略检索，保持原样，实现本地与外网图床混排。
 
 ### 3. 多种通用公众号图片排版样式
@@ -33,11 +33,11 @@
 
 ### 4. 微信公众号富文本适配与自动化发布 (WeChat HTML & Publisher)
 项目配备了格式转换与一键发布工具集：
-- **CSS 主题解耦**：支持通过 `--theme` 参数加载 `references/themes/{theme_name}.css` 中的标准 CSS，不再硬编码，极大地方便了排版样式的定制和扩展。
+- **CSS 主题解耦**：支持通过 `--theme` 参数加载 `themes/{theme_name}.css` 中的标准 CSS，不再硬编码，极大地方便了排版样式的定制和扩展。
 - **微信外链自动转脚注**：自动识别文章中的外部链接（如非 `mp.weixin.qq.com` 链接），转换成脚注 `<sup>[idx]</sup>` 并在文末生成格式美观的“引用链接”列表，完全适配微信对外部超链接的屏蔽规则。
 - **图片尺寸属性清洗**：自动剔除 HTML 中的 `width` 和 `height` 数值属性并转换为 `style` 行内宽高及 `object-fit: cover` 属性，彻底解决微信编辑器拉伸、压瘪图片的渲染 Bug。
 - **拼音注音 (Ruby) 语法**：提供 `[文字]{注音}` 转换至 `<ruby>文字<rt>注音</rt></ruby>` 的语法，使游戏名词或生僻字注音更方便。
-- **自动化发布与 MD5 缓存**：通过 `scripts/wechat_publisher.py` 可以直接将 HTML 一键发布为公众号后台的草稿，并在上传时利用本地 MD5 缓存（`.wechat_image_cache.json`）跳过重复上传的封面图和正文图片，节省微信 API 额度，大幅缩短二次发布的时间。
+- **自动化发布与 MD5 缓存**：通过 `scripts/publish.py` 可以直接将 HTML 一键发布为公众号后台的草稿，并在上传时利用本地 MD5 缓存（`.wechat_image_cache.json`）跳过重复上传的封面图和正文图片，节省微信 API 额度，大幅缩短二次发布的时间。
 
 ---
 
@@ -48,25 +48,28 @@
 ├── SKILL.md                # 技能核心指令集与人设定义
 ├── GEMINI.md               # 项目上下文与开发规范
 ├── requirements.txt        # 运行依赖包定义
-├── assets/
-│   └── img/                # 游戏素材库 (分类存储)
-│       ├── 装备/           # S/SS装备、核心材料
-│       ├── 宝箱/           # 各类宝箱、自选礼包
-│       ├── 配件/           # 科技配件相关
-│       ├── 收藏品/         # 具体收藏品图片
-│       ├── 道具/           # 钥匙、碎片、核心、货币
-│       ├── 宠物/           # 宠物相关
-│       └── 其它/           # 预留目录
-├── references/
-│   ├── formatting_rules.md # 文本排版与颜色规则说明
-│   ├── image_mapping.md    # 关键词 -> 物理图片路径映射表
-│   ├── examples.md         # 转换输出排版样式参考示例
-│   └── themes/             # 排版主题 CSS 样式目录
-│       └── default.css     # 默认精美排版主题 CSS
-├── scripts/
-│   ├── md_to_wechat.py     # Markdown 转微信公众号 HTML 转换器
-│   ├── wechat_api.py       # 封装的微信公众号接口客户端
-│   ├── wechat_publisher.py # 微信公众号一键草稿发布器
+├── engine/                 # 🔧 通用微信排版编译器与 API 引擎 (100% 通用)
+│   ├── compiler.py         # Markdown 转 HTML 核心逻辑
+│   ├── highlight.py        # 动态数值高亮规则加载器
+│   ├── wechat_api.py       # 封装 of 微信公众号 API 客户端
+│   ├── publisher.py        # 微信公众号一键草稿发布器
+│   └── utils.py            # 资源扫描与占位图辅助工具
+├── themes/                 # 🎨 公用排版主题 CSS 目录
+│   └── default.css         # 默认精美排版主题 CSS
+├── packs/                  # 📦 专属内容包目录 (按游戏或垂直领域拆分)
+│   └── danke/              # 弹壳特攻队攻略专属内容包
+│       ├── project.json    # 内容包配置 (指定图片字典、高亮规则与资源目录)
+│       ├── formatting_rules.md # 文本排版与颜色规则说明
+│       ├── image_mapping.md    # 关键词 -> 物理图片路径映射表
+│       ├── highlight_rules.json # 正则提取的数值高亮规则
+│       ├── examples.md     # 转换输出排版样式参考示例
+│       ├── templates/      # 攻略模板
+│       └── assets/         # 弹壳专属游戏素材库
+├── scripts/                # 🚀 命令行 CLI 入口
+│   ├── compile.py          # 通用编译 CLI（支持 --pack 参数）
+│   ├── publish.py          # 通用发布 CLI
+│   ├── md_to_wechat.py     # 【向后兼容】调用 compile.py --pack packs/danke
+│   ├── wechat_publisher.py # 【向后兼容】调用 publish.py
 │   └── config.json         # 公众号 API 配置文件（已在.gitignore中排除）
 └── test/
     ├── test_optimization.md      # 外链、注音、防拉伸测试文稿
@@ -85,30 +88,29 @@ pip install -r requirements.txt
 ```
 
 ### 2. 转换 Markdown 为微信公众号 HTML
-执行转换脚本，指定主题（默认为 `default`），将写好的 Markdown 攻略转换为适配微信后台的 HTML 富文本：
+执行编译脚本，指定对应的 `--pack` 内容包路径与主题：
 ```bash
-python3 scripts/md_to_wechat.py <input_md_file> [output_html_file] --theme default
+python3 scripts/compile.py --pack packs/danke <input_md_file> [output_html_file] --theme default
 ```
 * **示例**：
   ```bash
-  python3 scripts/md_to_wechat.py test/test_optimization.md --theme default
+  python3 scripts/compile.py --pack packs/danke test/test_optimization.md --theme default
   ```
   执行后会生成 `test/test_optimization_wechat.html` 及提取出的元数据 `test/test_optimization_wechat.json`。
 
 ### 3. 一键发布至微信公众号草稿箱
 在首次使用或需要配置公众号 API 时，可运行测试连接命令并根据提示输入凭证：
 ```bash
-python3 scripts/wechat_publisher.py --test-config
+python3 scripts/publish.py --test-config
 ```
 配置完成后，运行以下发布命令：
 ```bash
-python3 scripts/wechat_publisher.py -c test/test_optimization_wechat.html
+python3 scripts/publish.py -c test/test_optimization_wechat.html
 ```
 * **参数说明**：
-  - `-c, --content`：指定转换后的 HTML 文件路径（脚本会自动关联同名的 `.json` 元数据文件获取标题、封面等信息）。
-  - `-t, --title`：指定文章标题（若 HTML 对应的 JSON 中有 title 则可不填）。
-  - `--cover`：指定封面图片路径。
-  - `-a, --author`：指定作者（默认：`弹壳呱呱`）。
+  - `-c, --content`：指定转换后的 HTML 文件路径。
+  - `--new`：强制新建草稿，不使用已有缓存。
+  - `--cache-dir`：指定微信缓存存放目录（如 `--cache-dir .`）。
 
 执行后，脚本会先比对 MD5 缓存并上传未缓存的图片，然后一键创建草稿。成功后，可直接前往微信公众号后台的“草稿箱”查看与发布！
 
@@ -117,11 +119,11 @@ python3 scripts/wechat_publisher.py -c test/test_optimization_wechat.html
 ## 📝 维护指南
 
 ### 1. 游戏更新了新道具/装备时
-1. 将新的图片素材保存至 `assets/img/` 相应的分类目录下（建议使用 PNG 或 WebP 格式）。
-2. 打开 `references/image_mapping.md`，按照分类在表格中追加一行，定义对应的匹配关键词和物理相对路径，例如：
+1. 将新的图片素材保存至 `packs/danke/assets/img/` 相应的分类目录下。
+2. 打开 `packs/danke/image_mapping.md`，在表格中追加一行，定义关键词和物理相对路径，例如：
    ```markdown
-   | **【月殇护手】** | `![月殇护手](assets/img/装备/ss手套-月殇护手.png)` | 新装备 |
+   | **【月殇护手】** | `![月殇护手](packs/danke/assets/img/装备/ss手套-月殇护手.png)` | 新装备 |
    ```
 
 ### 2. 更新或调整排版样式时
-如果需要修改微信中各组件的默认字号、行高或颜色，无需修改任何 Python 逻辑，只需编辑 `references/themes/` 下对应的 `.css` 样式表文件（如 `default.css`）。转换引擎在编译时会自动读取对应的 CSS 选择器规则并内联至各个 HTML 标签。
+编辑 `themes/` 下对应的 `.css` 样式表文件（如 `default.css`）。转换引擎在编译时会自动读取对应的 CSS 选择器规则并内联至各个 HTML 标签。

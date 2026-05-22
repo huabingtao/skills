@@ -1,0 +1,25 @@
+{
+  "green": [
+    {"pattern": "(?<!\\d)(3|5|10|20|25)(?=\\s*(?:!\\[[黄红]星\\]|\\[[黄红]星\\]))", "description": "星级数量"},
+    {"pattern": "(?<!\\d)(3)(?=\\s*件)", "description": "收藏品件数"},
+    {"pattern": "(?<!\\d)(4s|3\\s*分钟|36s|\\+1秒)(?!\\d)", "description": "持续时间"},
+    {"pattern": "(?<=充能层数)(\\+1)(?!\\d)", "description": "充能属性"},
+    {"pattern": "(?<=数量)(\\+(?:5|10)%)", "description": "导弹数量增益"}
+  ],
+  "blue": [
+    {"pattern": "(?<=减伤效果)(\\+20%)", "description": "减伤类"}
+  ],
+  "red": [
+    {"pattern": "(?<=伤害)(\\+(?:5|10|50|13)%)", "description": "伤害增益"},
+    {"pattern": "(?<=同步率)(\\+10%)", "description": "同步率"},
+    {"pattern": "(?<=增加)(\\+?13%)", "description": "混沌之风增伤"},
+    {"pattern": "(?<=护盾增伤)(\\+30%)", "description": "护盾增伤"},
+    {"pattern": "(?<=冰霜血脉)(\\+10%)", "description": "冰霜血脉"},
+    {"pattern": "(\\+10%)(?=\\s*盾伤)", "description": "盾伤加成"}
+  ],
+  "colors": {
+    "green": "#52C41A",
+    "blue": "#1890FF",
+    "red": "#FF4D4F"
+  }
+}

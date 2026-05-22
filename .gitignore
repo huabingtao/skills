@@ -8,7 +8,11 @@ node_modules/
 .kiro/
 scripts/config.json
 .wechat_token_cache.json
-test/
+test/*_wechat.html
+test/*_wechat.json
+test/__pycache__/
+test/.test_wechat_image_cache.json
+test/temp_test_image.png
 __pycache__/
 *.pyc
 .wechat_image_cache.json
