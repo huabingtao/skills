@@ -376,6 +376,6 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
     # Wrap in a modern WeChat-optimized responsive container
     font_family = project_config.get("container_font", "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif")
     container_style = f"font-family: {font_family}; padding: 15px; max-width: 100%; box-sizing: border-box; font-size: 16px; color: #333; line-height: 1.8; word-wrap: break-word; text-align: justify;"
-    wrapped_html = f'<div style="{container_style}">\n{final_html}\n</div>'
+    wrapped_html = f'<meta name="referrer" content="no-referrer">\n<div style="{container_style}">\n{final_html}\n</div>'
 
     return wrapped_html, metadata

@@ -360,11 +360,6 @@ def main():
     else:
         print(f"Action: Create new draft")
     print("="*50)
-    
-    confirm = input("\nReady to push to WeChat Official Account Drafts? (y/n): ")
-    if confirm.lower() != 'y':
-        print("❌ Upload cancelled by user.")
-        sys.exit(0)
 
     client = WeChatClient(appid, appsecret, cache_dir=args.cache_dir)
     cache = load_cache(cache_file)
@@ -412,24 +407,20 @@ def main():
             except Exception as e:
                 if "invalid media_id" in str(e).lower() or "40007" in str(e):
                     print(f"\n⚠ Warning: Existing draft MediaID {existing_media_id} not found (may have been deleted).")
-                    fallback = input("Create a new draft instead? (y/n): ")
-                    if fallback.lower() == 'y':
-                        print(f"→ Creating draft: '{title}'...")
-                        draft_media_id = client.create_draft(
-                            title=title,
-                            html_content=html_content,
-                            thumb_media_id=thumb_media_id,
-                            author=author,
-                            digest=digest
-                        )
-                        draft_cache[html_abs_path] = draft_media_id
-                        save_draft_cache(draft_cache, draft_cache_file)
-                        print("\n" + "="*40)
-                        print("🚀 DRAFT CREATION SUCCESSFUL!")
-                        print(f"Draft MediaID: {draft_media_id}")
-                        print("="*40)
-                    else:
-                        raise e
+                    print(f"→ Falling back to create a new draft instead: '{title}'...")
+                    draft_media_id = client.create_draft(
+                        title=title,
+                        html_content=html_content,
+                        thumb_media_id=thumb_media_id,
+                        author=author,
+                        digest=digest
+                    )
+                    draft_cache[html_abs_path] = draft_media_id
+                    save_draft_cache(draft_cache, draft_cache_file)
+                    print("\n" + "="*40)
+                    print("🚀 DRAFT CREATION SUCCESSFUL!")
+                    print(f"Draft MediaID: {draft_media_id}")
+                    print("="*40)
                 else:
                     raise e
         else:
