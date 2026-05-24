@@ -180,6 +180,13 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
     md_content = re.sub(r'^[ \t]*[*+-]\s*$\n?', '', md_content, flags=re.MULTILINE)
     md_content = re.sub(r'^[ \t]*\d+\.\s*$\n?', '', md_content, flags=re.MULTILINE)
 
+    # Merge colon-wrapped break lines inside list items (e.g. * Item \n : description) to prevent unexpected line breaks
+    md_content = re.sub(r'(^[ \t]*[*+-]\s+[^\n]+)\n[ \t]*[:：]\s*', r'\1：', md_content, flags=re.MULTILINE)
+    md_content = re.sub(r'(^[ \t]*\d+\.\s+[^\n]+)\n[ \t]*[:：]\s*', r'\1：', md_content, flags=re.MULTILINE)
+
+    # Remove GitHub style admonitions (e.g. [!IMPORTANT], [!TIP]) in blockquotes
+    md_content = re.sub(r'^[ \t]*>\s*\[!(IMPORTANT|TIP|NOTE|WARNING|CAUTION)\][ \t]*\n?', '', md_content, flags=re.IGNORECASE | re.MULTILINE)
+
     # Cut off: Unordered -> Ordered list
     md_content = re.sub(
         r'(^[ \t]*[*+-]\s+[^\n]*)(?:\n[ \t]*)*(?=\n[ \t]*\d+\.\s+)',
