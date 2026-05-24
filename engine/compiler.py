@@ -175,6 +175,29 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
             return abs_p
         return p
 
+    # 0. Preprocess Lists to prevent Python-Markdown from merging distinct list types or blocks
+    # Cut off: Unordered -> Ordered list
+    md_content = re.sub(
+        r'(^[ \t]*[*+-]\s+[^\n]*)(?:\n[ \t]*)*(?=\n[ \t]*\d+\.\s+)',
+        r'\1\n\n<!-- -->',
+        md_content,
+        flags=re.MULTILINE
+    )
+    # Cut off: Ordered -> Unordered list
+    md_content = re.sub(
+        r'(^[ \t]*\d+\.\s+[^\n]*)(?:\n[ \t]*)*(?=\n[ \t]*[*+-]\s+)',
+        r'\1\n\n<!-- -->',
+        md_content,
+        flags=re.MULTILINE
+    )
+    # Cut off: Ordered -> Another new Ordered list starting with 1.
+    md_content = re.sub(
+        r'(^[ \t]*\d+\.\s+[^\n]*)(?:\n[ \t]*)*(?=\n[ \t]*1\.\s+)',
+        r'\1\n\n<!-- -->',
+        md_content,
+        flags=re.MULTILINE
+    )
+
     # 1. Preprocess Ruby Annotations: [文字]{注音} -> <ruby>文字<rt>注音</rt></ruby>
     md_content = re.sub(r'\[([^\]\n]+)\]\{([^\}\n]+)\}', r'<ruby>\1<rt>\2</rt></ruby>', md_content)
 
