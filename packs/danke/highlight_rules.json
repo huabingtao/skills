@@ -4,10 +4,12 @@
     {"pattern": "(?<!\\d)(3)(?=\\s*件)", "description": "收藏品件数"},
     {"pattern": "(?<!\\d)(4s|3\\s*分钟|36s|\\+1秒)(?!\\d)", "description": "持续时间"},
     {"pattern": "(?<=充能层数)(\\+1)(?!\\d)", "description": "充能属性"},
-    {"pattern": "(?<=数量)(\\+(?:5|10)%)", "description": "导弹数量增益"}
+    {"pattern": "(?<=数量)(\\+(?:5|10)%)", "description": "导弹数量增益"},
+    {"pattern": "(?<!\\d)(110|5星|0:00|3:00|4:00|05:13|05:38|5分38秒|30-40\\s*秒|15\\s*分钟)(?!\\d)", "description": "逃离行动时间与等级"}
   ],
   "blue": [
-    {"pattern": "(?<=减伤效果)(\\+20%)", "description": "减伤类"}
+    {"pattern": "(?<=减伤效果)(\\+20%)", "description": "减伤类"},
+    {"pattern": "(?<!\\d)(14211)(?!\\d)", "description": "生命值面板"}
   ],
   "red": [
     {"pattern": "(?<=伤害)(\\+(?:5|10|50|13)%)", "description": "伤害增益"},
@@ -15,7 +17,8 @@
     {"pattern": "(?<=增加)(\\+?13%)", "description": "混沌之风增伤"},
     {"pattern": "(?<=护盾增伤)(\\+30%)", "description": "护盾增伤"},
     {"pattern": "(?<=冰霜血脉)(\\+10%)", "description": "冰霜血脉"},
-    {"pattern": "(\\+10%)(?=\\s*盾伤)", "description": "盾伤加成"}
+    {"pattern": "(\\+10%)(?=\\s*盾伤)", "description": "盾伤加成"},
+    {"pattern": "(?<!\\d)(5039)(?!\\d)", "description": "攻击力面板"}
   ],
   "colors": {
     "green": "#52C41A",

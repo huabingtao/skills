@@ -176,6 +176,10 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
         return p
 
     # 0. Preprocess Lists to prevent Python-Markdown from merging distinct list types or blocks
+    # Clean up empty list items (e.g. "* " or "1. " with nothing after them) to prevent rendering empty elements
+    md_content = re.sub(r'^[ \t]*[*+-]\s*$\n?', '', md_content, flags=re.MULTILINE)
+    md_content = re.sub(r'^[ \t]*\d+\.\s*$\n?', '', md_content, flags=re.MULTILINE)
+
     # Cut off: Unordered -> Ordered list
     md_content = re.sub(
         r'(^[ \t]*[*+-]\s+[^\n]*)(?:\n[ \t]*)*(?=\n[ \t]*\d+\.\s+)',
@@ -393,6 +397,12 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
             
             p.append(i_tag)
             soup.append(p)
+
+    # Clean up empty text nodes inside <ul> and <ol> to prevent WeChat editor from generating extra list items
+    for list_tag in soup.find_all(['ul', 'ol']):
+        for child in list(list_tag.children):
+            if not child.name and isinstance(child, str) and not child.strip():
+                child.extract()
 
     final_html = str(soup)
 
