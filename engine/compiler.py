@@ -175,6 +175,17 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
             return abs_p
         return p
 
+    metadata = {}
+    # Extract Frontmatter
+    if md_content.startswith('---'):
+        parts = re.split(r'^---', md_content, maxsplit=2, flags=re.MULTILINE)
+        if len(parts) >= 3:
+            try:
+                metadata = yaml.safe_load(parts[1]) or {}
+                md_content = parts[2]
+            except Exception as e:
+                print(f"⚠ Warning: Failed to parse frontmatter: {e}")
+
     # 0. Preprocess Lists to prevent Python-Markdown from merging distinct list types or blocks
     # Clean up empty list items (e.g. "* " or "1. " with nothing after them) to prevent rendering empty elements
     md_content = re.sub(r'^[ \t]*[*+-]\s*$\n?', '', md_content, flags=re.MULTILINE)
@@ -216,17 +227,6 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
     if highlight_rules_path:
         rules = load_highlight_rules(highlight_rules_path)
         md_content = apply_highlight_rules(md_content, rules)
-
-    metadata = {}
-    # Extract Frontmatter
-    if md_content.startswith('---'):
-        parts = re.split(r'^---', md_content, maxsplit=2, flags=re.MULTILINE)
-        if len(parts) >= 3:
-            try:
-                metadata = yaml.safe_load(parts[1]) or {}
-                md_content = parts[2]
-            except Exception as e:
-                print(f"⚠ Warning: Failed to parse frontmatter: {e}")
 
     # Load image mapping dictionary
     image_mapping = load_image_mapping(image_mapping_path) if image_mapping_path else {}

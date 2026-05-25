@@ -87,6 +87,9 @@ ol {
 }
 
 li {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: nowrap;
   margin-bottom: 8px !important;
   line-height: 1.75 !important;
   color: #333 !important;
@@ -136,5 +139,10 @@ hr {
 }
 
 strong {
-  font-weight: bold;
+  font-weight: bold !important;
+  display: inline !important;
+}
+li strong {
+  display: inline !important;
+  white-space: nowrap !important;
 }

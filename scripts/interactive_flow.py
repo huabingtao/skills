@@ -307,7 +307,9 @@ def run_stage_3(input_path, output_path, project_config):
         content = f.read()
 
     input_dir = os.path.dirname(os.path.abspath(input_path))
-    wechat_html, metadata = convert_to_wechat_html(content, project_config, input_dir=input_dir)
+    local_config = project_config.copy()
+    local_config["highlight_rules_path"] = None
+    wechat_html, metadata = convert_to_wechat_html(content, local_config, input_dir=input_dir)
 
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(wechat_html)
