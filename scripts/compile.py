@@ -26,7 +26,7 @@ def load_project_config(pack_dir, theme_override=None):
     """
     project_json_path = os.path.join(pack_dir, "project.json")
     if not os.path.exists(project_json_path):
-        print(f"❌ Error: project.json not found in pack directory: {pack_dir}")
+        print("❌ Error: project.json not found in pack directory: " + str(pack_dir))
         sys.exit(1)
 
     with open(project_json_path, "r", encoding="utf-8") as f:
@@ -51,14 +51,14 @@ def load_project_config(pack_dir, theme_override=None):
         if os.path.exists(rules_path):
             project_config["highlight_rules_path"] = rules_path
 
-    # Theme: override > pack config > default
-    theme_name = theme_override or config.get("theme", "default")
+    # Theme: override > pack config > default (minimal as default)
+    theme_name = theme_override or config.get("theme", "minimal")
     themes_dir = os.path.join(PROJECT_ROOT, "themes")
-    theme_path = os.path.join(themes_dir, f"{theme_name}.css")
+    theme_path = os.path.join(themes_dir, theme_name + ".css")
     if os.path.exists(theme_path):
         project_config["theme_path"] = theme_path
     else:
-        print(f"⚠ Warning: Theme '{theme_name}' not found at {theme_path}, using default")
+        print("⚠ Warning: Theme '" + str(theme_name) + "' not found at " + str(theme_path) + ", using default")
         default_theme = os.path.join(themes_dir, "default.css")
         if os.path.exists(default_theme):
             project_config["theme_path"] = default_theme
@@ -80,9 +80,9 @@ def build_default_config(theme_override=None):
     """
     project_config = {}
 
-    theme_name = theme_override or "default"
+    theme_name = theme_override or "minimal"
     themes_dir = os.path.join(PROJECT_ROOT, "themes")
-    theme_path = os.path.join(themes_dir, f"{theme_name}.css")
+    theme_path = os.path.join(themes_dir, theme_name + ".css")
     if os.path.exists(theme_path):
         project_config["theme_path"] = theme_path
 
@@ -112,13 +112,13 @@ def main():
     meta_path = os.path.splitext(output_path)[0] + ".json"
 
     if not os.path.exists(input_path):
-        print(f"❌ Error: File not found: {input_path}")
+        print("❌ Error: File not found: " + str(input_path))
         sys.exit(1)
 
     # Build project config
     if args.pack:
         project_config = load_project_config(args.pack, args.theme)
-        print(f"📦 Using content pack: {args.pack}")
+        print("📦 Using content pack: " + str(args.pack))
     else:
         project_config = build_default_config(args.theme)
         print("ℹ No content pack specified, using pure layout mode")
@@ -146,12 +146,12 @@ def main():
             with open(meta_path, "w", encoding="utf-8") as f:
                 json.dump(metadata, f, ensure_ascii=False, indent=2, default=json_serial)
 
-        print(f"✅ Successfully converted '{input_path}' → '{output_path}'")
+        print("✅ Successfully converted '" + str(input_path) + "' → '" + str(output_path) + "'")
         if metadata:
-            print(f"✅ Metadata saved to '{meta_path}'")
+            print("✅ Metadata saved to '" + str(meta_path) + "'")
 
     except Exception as e:
-        print(f"❌ Error during conversion: {e}")
+        print("❌ Error during conversion: " + str(e))
         import traceback
         traceback.print_exc()
         sys.exit(1)

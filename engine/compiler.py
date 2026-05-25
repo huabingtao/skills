@@ -47,7 +47,7 @@ def apply_css_theme(soup, theme_path):
     Applies the CSS rules defined in theme_path to elements in the soup.
     """
     if not theme_path or not os.path.exists(theme_path):
-        print(f"⚠ Warning: Theme CSS file not found or not specified: {theme_path}")
+        print("⚠ Warning: Theme CSS file not found or not specified: " + str(theme_path))
         return
         
     try:
@@ -64,14 +64,14 @@ def apply_css_theme(soup, theme_path):
                     if existing_style:
                         if not existing_style.endswith(';'):
                             existing_style += ';'
-                        elem['style'] = f"{existing_style} {new_style}"
+                        elem['style'] = existing_style + " " + new_style
                     else:
                         elem['style'] = new_style
             except Exception:
                 # Silently skip advanced/unsupported selectors in soup
                 pass
     except Exception as e:
-        print(f"⚠ Warning: Error applying CSS theme: {e}")
+        print("⚠ Warning: Error applying CSS theme: " + str(e))
 
 
 def apply_image_node_styles(img, params):
@@ -100,19 +100,19 @@ def apply_image_node_styles(img, params):
         inline_style = "width: 24px; height: 24px; vertical-align: middle; display: inline-block; margin: -2px 4px 0 4px; object-fit: cover;"
     else:
         if 'w' in params:
-            inline_style += f"width: {params['w']}; "
+            inline_style += "width: " + str(params['w']) + "; "
         if 'h' in params:
-            inline_style += f"height: {params['h']}; "
+            inline_style += "height: " + str(params['h']) + "; "
             
     if 'pd' in params:
-        inline_style += f"padding: {params['pd']}px; box-sizing: border-box; "
+        inline_style += "padding: " + str(params['pd']) + "px; box-sizing: border-box; "
 
     if inline_style:
         existing_style = img.get('style', '').strip()
         if existing_style:
             if not existing_style.endswith(';'):
                 existing_style += ';'
-            img['style'] = f"{existing_style} {inline_style}"
+            img['style'] = existing_style + " " + inline_style
         else:
             img['style'] = inline_style
 
@@ -184,7 +184,7 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
                 metadata = yaml.safe_load(parts[1]) or {}
                 md_content = parts[2]
             except Exception as e:
-                print(f"⚠ Warning: Failed to parse frontmatter: {e}")
+                print("⚠ Warning: Failed to parse frontmatter: " + str(e))
 
     # 0. Preprocess Lists to prevent Python-Markdown from merging distinct list types or blocks
     # Clean up empty list items (e.g. "* " or "1. " with nothing after them) to prevent rendering empty elements
@@ -304,13 +304,13 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
         style_additions = []
         if width:
             img.attrs.pop('width', None)
-            width_str = f"{width}px" if width.isdigit() else width
-            style_additions.append(f"width: {width_str};")
+            width_str = width + "px" if width.isdigit() else width
+            style_additions.append("width: " + width_str + ";")
             
         if height:
             img.attrs.pop('height', None)
-            height_str = f"{height}px" if height.isdigit() else height
-            style_additions.append(f"height: {height_str};")
+            height_str = height + "px" if height.isdigit() else height
+            style_additions.append("height: " + height_str + ";")
             
         if style_additions:
             style_additions.append("object-fit: cover;")
@@ -319,7 +319,7 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
             if existing_style:
                 if not existing_style.endswith(';'):
                     existing_style += ';'
-                img['style'] = f"{existing_style} {new_styles}"
+                img['style'] = existing_style + " " + new_styles
             else:
                 img['style'] = new_styles
 
@@ -344,15 +344,15 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
         else:
             fallback_match = assets_cache.get(key_name.lower()) or assets_cache.get(base_name.lower())
             if fallback_match:
-                print(f"ℹ Auto-resolved missing image '{src}' via folder scanning to: {fallback_match}")
+                print("ℹ Auto-resolved missing image '" + str(src) + "' via folder scanning to: " + str(fallback_match))
                 resolved = get_relative_to_project(fallback_match, input_dir)
             else:
                 placeholder_path = "assets/img/占位图.png"
                 if check_file_exists(placeholder_path):
-                    print(f"⚠ Warning: Image '{src}' not found on disk or mapping. Falling back to placeholder.")
+                    print("⚠ Warning: Image '" + str(src) + "' not found on disk or mapping. Falling back to placeholder.")
                     resolved = placeholder_path
                 else:
-                    print(f"⚠ Warning: Image '{src}' not found, and placeholder not found at '{placeholder_path}'")
+                    print("⚠ Warning: Image '" + str(src) + "' not found, and placeholder not found at '" + str(placeholder_path) + "'")
         
         if resolved:
             img['src'] = resolved
@@ -375,7 +375,7 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
             index = len(external_links)
             
         sup = soup.new_tag('sup')
-        sup.string = f"[{index}]"
+        sup.string = "[" + str(index) + "]"
         a.append(sup)
 
     if external_links:
@@ -393,10 +393,10 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
             
             code = soup.new_tag('code')
             code['style'] = "font-size: 90%; opacity: 0.6; background-color: #f3f4f5; padding: 2px 4px; border-radius: 4px;"
-            code.string = f"[{idx}]"
+            code.string = "[" + str(idx) + "]"
             
             p.append(code)
-            p.append(f" {link_info['title']}: ")
+            p.append(" " + str(link_info['title']) + ": ")
             
             i_tag = soup.new_tag('i')
             i_tag['style'] = "word-break: break-all; color: #576b95;"
@@ -415,7 +415,7 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
 
     # Wrap in a modern WeChat-optimized responsive container
     font_family = project_config.get("container_font", "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif")
-    container_style = f"font-family: {font_family}; padding: 15px; max-width: 100%; box-sizing: border-box; font-size: 16px; color: #333; line-height: 1.8; word-wrap: break-word; text-align: justify;"
-    wrapped_html = f'<meta name="referrer" content="no-referrer">\n<div style="{container_style}">\n{final_html}\n</div>'
+    container_style = "font-family: " + str(font_family) + "; padding: 15px; max-width: 100%; box-sizing: border-box; font-size: 16px; color: #333; line-height: 1.8; word-wrap: break-word; text-align: justify;"
+    wrapped_html = '<meta name="referrer" content="no-referrer">\n<div style="' + container_style + '">\n' + final_html + '\n</div>'
 
     return wrapped_html, metadata
