@@ -78,40 +78,27 @@
 
 ---
 
-## 🚀 快速上手使用说明
+## 🚀 快速上手使用说明 (Agent Workflow)
 
-### 1. 安装环境依赖
-在终端中执行以下命令安装运行所需的 Python 依赖：
+这是一个专门为 AI Agent 设计的自动化技能包。作为用户，您**无需手动运行任何 Python 脚本**，大模型会自动根据您的指令调用相关底层脚本和功能。
+
+### 1. 触发指令
+您只需要在对话中提供需要处理的攻略文章（或直接告诉 Agent 文件的路径），并给出明确的需求，例如：
+> "帮我美化/优化一下这篇弹壳攻略"
+> "排版这篇攻略，并发布到我的微信公众号草稿箱"
+
+### 2. 自动化执行流程
+AI Agent 接收到您的指令后，将通过该 Skill 在后台全自动代您执行以下流程：
+1. **文本整理与数值高亮**：扫描纯文本，根据预设给关键数值应用标准 HTML 色彩与加粗样式。
+2. **智能插图映射**：自动寻找文中提到的专用武器和收藏品名词，基于本地词典注入图片代码和排版布局类型。
+3. **微信公众号 HTML 编译**：将其转换为微信兼容的内联 CSS 排版，解决图片拉伸与外链失效问题。
+4. **全自动微信发布**：自动处理本地图片的 MD5 缓存去重，并将 HTML 文章一键推送到您的微信草稿箱。
+
+### 3. 环境与依赖（仅供首次配置）
+如果你是在全新的终端或系统上部署该项目，Agent 需要确保底层已安装必要的 Python 依赖：
 ```bash
 pip install -r requirements.txt
 ```
-
-### 2. 转换 Markdown 为微信公众号 HTML
-执行编译脚本，指定对应的 `--pack` 内容包路径与主题：
-```bash
-python3 scripts/compile.py --pack packs/danke <input_md_file> [output_html_file] --theme default
-```
-* **示例**：
-  ```bash
-  python3 scripts/compile.py --pack packs/danke test/test_optimization.md --theme default
-  ```
-  执行后会生成 `test/test_optimization_wechat.html` 及提取出的元数据 `test/test_optimization_wechat.json`。
-
-### 3. 一键发布至微信公众号草稿箱
-在首次使用或需要配置公众号 API 时，可运行测试连接命令并根据提示输入凭证：
-```bash
-python3 scripts/publish.py --test-config
-```
-配置完成后，运行以下发布命令：
-```bash
-python3 scripts/publish.py -c test/test_optimization_wechat.html
-```
-* **参数说明**：
-  - `-c, --content`：指定转换后的 HTML 文件路径。
-  - `--new`：强制新建草稿，不使用已有缓存。
-  - `--cache-dir`：指定微信缓存存放目录（如 `--cache-dir .`）。
-
-执行后，脚本会先比对 MD5 缓存并上传未缓存的图片，然后一键创建草稿。成功后，可直接前往微信公众号后台的“草稿箱”查看与发布！
 
 ---
 
