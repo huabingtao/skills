@@ -437,6 +437,70 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
                 else:
                     li['style'] = nowrap_rule
 
+    # Prevent line breaks around the first colon in list items (e.g. "专属效果：...")
+    for li in soup.find_all('li'):
+        # Skip star list items which are already fully nowrap
+        li_style = li.get('style', '')
+        if 'white-space: nowrap' in li_style:
+            continue
+            
+        text = li.get_text()
+        colon_match = re.search(r'[:：]', text)
+        if not colon_match:
+            continue
+            
+        colon_idx = colon_match.start()
+        
+        children = list(li.contents)
+        nodes_to_wrap = []
+        remaining_nodes = []
+        current_len = 0
+        found = False
+        
+        for child in children:
+            if found:
+                remaining_nodes.append(child)
+                continue
+                
+            child_text = child.get_text() if hasattr(child, 'get_text') else str(child)
+            child_len = len(child_text)
+            
+            if current_len <= colon_idx < current_len + child_len:
+                found = True
+                rel_idx = colon_idx - current_len
+                
+                # Check if it's a text node (NavigableString/str or has no name)
+                if not hasattr(child, 'name') or child.name is None:
+                    left_text = child[:rel_idx + 1]
+                    right_text = child[rel_idx + 1:]
+                    
+                    # Consume any trailing spaces to include them in nowrap
+                    spaces = ""
+                    while right_text and right_text[0] in (' ', '\t'):
+                        spaces += right_text[0]
+                        right_text = right_text[1:]
+                        
+                    left_node = soup.new_string(left_text + spaces)
+                    nodes_to_wrap.append(left_node)
+                    if right_text:
+                        right_node = soup.new_string(right_text)
+                        remaining_nodes.append(right_node)
+                else:
+                    nodes_to_wrap.append(child)
+            else:
+                nodes_to_wrap.append(child)
+                current_len += child_len
+                
+        if nodes_to_wrap:
+            li.clear()
+            font_tag = soup.new_tag('font')
+            font_tag['style'] = 'white-space: nowrap !important;'
+            for node in nodes_to_wrap:
+                font_tag.append(node)
+            li.append(font_tag)
+            for node in remaining_nodes:
+                li.append(node)
+
     final_html = str(soup)
 
     # Wrap in a modern WeChat-optimized responsive container

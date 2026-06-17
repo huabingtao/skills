@@ -94,5 +94,46 @@ class TestWeChatCompiler(unittest.TestCase):
         self.assertIn("width: 100%", imgs[1].get('style', ''))
         self.assertIn("border-radius: 8px", imgs[1].get('style', ''))
 
+    def test_list_colon_nowrap(self):
+        """Verify list item keys and colons are wrapped in nowrap font tags."""
+        md = (
+            "* **专属效果**：对应S级装备破坏者风衣。\n"
+            "* 培养建议: 推荐拉到3[红星]\n"
+            "* 3[红星](img://红星){type=icon}：暴击率+5%\n"
+        )
+        html, _ = convert_to_wechat_html(md, self.project_config)
+        soup = BeautifulSoup(html, 'html.parser')
+        lis = soup.find_all('li')
+        self.assertEqual(len(lis), 3)
+
+        # 1. First li has bold prefix and Chinese colon
+        # Expected: <font style="white-space: nowrap !important;"><strong>专属效果</strong>：</font>对应S级装备破坏者风衣。
+        li1 = lis[0]
+        font1 = li1.find('font')
+        self.assertIsNotNone(font1)
+        self.assertEqual(font1.get('style'), 'white-space: nowrap !important;')
+        self.assertIn("专属效果", font1.text)
+        self.assertIn("：", font1.text)
+        self.assertNotIn("对应S级装备", font1.text)
+        # Check that <strong> is inside the font tag
+        self.assertEqual(font1.find('strong').text, "专属效果")
+
+        # 2. Second li has no bold but English colon followed by space
+        # Expected: <font style="white-space: nowrap !important;">培养建议: </font>推荐拉到3[红星]
+        li2 = lis[1]
+        font2 = li2.find('font')
+        self.assertIsNotNone(font2)
+        self.assertEqual(font2.get('style'), 'white-space: nowrap !important;')
+        self.assertEqual(font2.text, "培养建议: ")
+        self.assertNotIn("推荐拉到", font2.text)
+
+        # 3. Third li is a star list item, which should have style="white-space: nowrap !important;" on the <li> tag itself,
+        # and NOT have nested colon nowrap font wrapper (since we skipped it).
+        li3 = lis[2]
+        self.assertIn("white-space: nowrap", li3.get('style', ''))
+        # Ensure it doesn't have the nowrap font tag wrapping the colon
+        font3 = li3.find('font', attrs={'style': 'white-space: nowrap !important;'})
+        self.assertIsNone(font3)
+
 if __name__ == '__main__':
     unittest.main()
