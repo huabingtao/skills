@@ -1,9 +1,7 @@
 # 弹壳攻略文字美化规则
 
 ## 1. 数值高亮 (HTML Color)
-- **攻击类数值** (攻击、暴击、伤害、增益)：使用红色加粗 `<span style="color: #FF4D4F; font-weight: bold;">数值</span>`。
-- **生存类数值** (生命、防御、减伤、回复)：使用蓝色加粗 `<span style="color: #1890FF; font-weight: bold;">数值</span>`。
-- **通用/异常类数值** (范围、冷却、持续时间、中毒)：使用绿色加粗 `<span style="color: #52C41A; font-weight: bold;">数值</span>`。
+- **所有匹配的数值与属性增幅** (如星级数量、持续时间、攻击/伤害增益、生命/防御面板等)：统一使用红色加粗。在 HTML 中编译为微信安全的 `<strong><font color="#FF4D4F">数值</font></strong>`。
 
 ## 2. 智能图像注入规则 (Image Injection)
 - **标准语法（Markdown）**：仅支持标准 Markdown 图片配合 `img://` 协议书写。
@@ -16,6 +14,7 @@
 - **支持的排版样式类型 (`type=`)**：
   *   `card`：大卡片展示（90% 宽，居中圆角，带阴影）。
   *   `banner`：宽幅海报（100% 宽，居中微圆角）。
+  *   `center`：居中展示，支持通过 `w` 自定义宽度（如 `{type=center;w=80%}` 或 `{type=center;w=300}`）。
   *   `grid2`：双栏对比并排（48% 宽，圆角微阴影）。
   *   `grid3`：三栏并排（31.3% 宽，圆角微阴影）。
   *   `grid4`：四栏并排（23% 宽，圆角微阴影）。

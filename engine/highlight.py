@@ -90,7 +90,7 @@ def apply_highlight_rules(md_content, rules):
             try:
                 md_content = re.sub(
                     pattern,
-                    rf'<span style="color: {hex_value}; font-weight: bold;">\1</span>',
+                    rf'<strong><font color="{hex_value}">\1</font></strong>',
                     md_content
                 )
             except re.error as e:

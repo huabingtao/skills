@@ -90,12 +90,10 @@ ol {
 }
 
 li {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: nowrap;
   margin-bottom: 8px !important;
   line-height: 1.75 !important;
   color: #b0b0d0 !important;
+  text-align: left !important;
 }
 
 table {

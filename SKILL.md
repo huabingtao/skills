@@ -29,7 +29,7 @@ description: 专为《弹壳特攻队》攻略提供一键美化排版与微信�
 
 ### 阶段二：智能配图与样式注入 (Image Mapping & Layout Selection)
 1. **关键词配图**：根据 `packs/danke/image_mapping.json` 图片字典，自动在对应名词后方注入 Markdown 格式的物理图片，例如 `![追光者](追光者)`。
-2. **布局类型应用**：根据文章语境，为大图图片添加 `{type=card}` 或 `{type=banner}`，为对比图添加 `{type=grid2}`，为头像/微标添加 `{type=avatar}` 或 `{type=icon}` 等排版后缀。
+2. **布局类型应用**：根据文章语境，为大图图片添加 `{type=card}` 或 `{type=banner}`，为对比图添加 `{type=grid2}`，为居中自定义宽度图添加 `{type=center;w=宽度}`，为头像/微标添加 `{type=avatar}` 或 `{type=icon}` 等排版后缀。
 3. **用户反馈**：
    * **展示内容**：注入图片标签后的 Markdown 文本。
    * **询问问题**：*“自动配图与布局样式已注入完成，您看是否满意？输入【继续】将进入阶段三（微信 HTML 编译），或者输入您的修改意见。”*

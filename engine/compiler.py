@@ -82,6 +82,16 @@ def apply_image_node_styles(img, params):
     img_type = params.get('type')
     if img_type == 'card':
         inline_style = "display: block; margin: 20px auto; width: 90%; max-width: 100%; border-radius: 12px; box-shadow: 0 10px 20px rgba(0,0,0,0.1); border: 1px solid #eee;"
+    elif img_type == 'center':
+        width_val = params.get('w', 'auto')
+        if width_val.isdigit():
+            width_val += 'px'
+        inline_style = "display: block; margin: 20px auto; width: " + str(width_val) + "; max-width: 100%;"
+        if 'h' in params:
+            h_val = params['h']
+            if h_val.isdigit():
+                h_val += 'px'
+            inline_style += " height: " + str(h_val) + ";"
     elif img_type == 'banner':
         inline_style = "display: block; margin: 20px auto; width: 100%; max-width: 100%; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.08);"
     elif img_type == 'grid2':
@@ -261,10 +271,12 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
     extensions = ['fenced_code', 'tables', 'nl2br', 'toc']
     html = markdown.markdown(md_content, extensions=extensions)
 
-    # Convert <font color="..."> (from strategy rules) to <span style="color: ...">
+    # Convert <font color="..."> (from strategy rules) to <strong><font color="...">
     html = re.sub(r'<font\s+[^>]*?color=["\'](.*?)["\']\s*>(.*?)</font>', 
-                  r'<span style="color: \1; font-weight: bold;">\2</span>', 
+                  r'<strong><font color="\1">\2</font></strong>', 
                   html, flags=re.IGNORECASE)
+    # Flatten duplicate strong tags
+    html = re.sub(r'<strong>\s*<strong>(.*?)</strong>\s*</strong>', r'<strong>\1</strong>', html)
 
     # Parse with BeautifulSoup for structural modifications
     soup = BeautifulSoup(html, 'html.parser')
@@ -410,6 +422,20 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
         for child in list(list_tag.children):
             if not child.name and isinstance(child, str) and not child.strip():
                 child.extract()
+
+    # Apply nowrap inline style to star list items to prevent mobile wrapping
+    for li in soup.find_all('li'):
+        text = li.get_text().strip()
+        if text and text[0].isdigit() and ('：' in text or ': ' in text):
+            if any(img.get('alt') in ('红星', '黄星') for img in li.find_all('img')) or '星' in text:
+                existing_style = li.get('style', '').strip()
+                nowrap_rule = "white-space: nowrap !important;"
+                if existing_style:
+                    if not existing_style.endswith(';'):
+                        existing_style += ';'
+                    li['style'] = existing_style + " " + nowrap_rule
+                else:
+                    li['style'] = nowrap_rule
 
     final_html = str(soup)
 

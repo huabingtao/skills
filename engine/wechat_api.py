@@ -9,10 +9,10 @@ Copied from scripts/wechat_api.py with the following change:
 """
 
 import os
-for key in ['http_proxy', 'https_proxy', 'all_proxy', 'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY']:
-    os.environ.pop(key, None)
+# for key in ['http_proxy', 'https_proxy', 'all_proxy', 'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY']:
+#     os.environ.pop(key, None)
 import urllib.request
-urllib.request.getproxies = lambda: {}
+# urllib.request.getproxies = lambda: {}
 import json
 import time
 import requests
