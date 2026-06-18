@@ -349,7 +349,19 @@ def main():
 
     html_abs_path = os.path.abspath(args.content)
     draft_cache = load_draft_cache(draft_cache_file)
-    existing_media_id = None if args.new else draft_cache.get(html_abs_path)
+    cached_entry = draft_cache.get(html_abs_path)
+    
+    existing_media_id = None
+    cached_html_hash = None
+    cached_cover_hash = None
+    
+    if not args.new and cached_entry:
+        if isinstance(cached_entry, dict):
+            existing_media_id = cached_entry.get("media_id")
+            cached_html_hash = cached_entry.get("html_hash")
+            cached_cover_hash = cached_entry.get("cover_hash")
+        else:
+            existing_media_id = cached_entry
 
     # Confirmation
     print("\n" + "="*50)
@@ -390,8 +402,22 @@ def main():
         print("→ Processing content images...")
         html_content = process_content_images(client, html_content, os.path.dirname(os.path.abspath(args.content)), cache, cache_file)
 
+        # Compute hashes for change detection
+        current_html_hash = hashlib.md5(html_content.encode('utf-8')).hexdigest()
+        current_cover_hash = cover_md5
+
+        # Check if draft is already up-to-date to preserve manual settings on WeChat Admin Platform
+        if not args.new and existing_media_id and cached_html_hash == current_html_hash and cached_cover_hash == current_cover_hash:
+            print("\n⚡ Draft is already up-to-date on WeChat!")
+            print(f"Skipping draft update for '{title}' (MediaID: {existing_media_id}) to preserve manual settings (comments, originality, albums, etc.).")
+            print("="*40)
+            return
+
         # 4. Create/Update Draft
         digest = metadata.get('summary') or metadata.get('digest') or ""
+        need_open_comment = metadata.get('need_open_comment', 1)  # Default to 1 (Open comment)
+        only_fans_can_comment = metadata.get('only_fans_can_comment', 0)
+
         if existing_media_id:
             try:
                 print(f"→ Updating draft '{title}' with MediaID: {existing_media_id}...")
@@ -401,9 +427,20 @@ def main():
                     html_content=html_content,
                     thumb_media_id=thumb_media_id,
                     author=author,
-                    digest=digest
+                    digest=digest,
+                    need_open_comment=need_open_comment,
+                    only_fans_can_comment=only_fans_can_comment
                 )
                 draft_media_id = existing_media_id
+                
+                # Update cache
+                draft_cache[html_abs_path] = {
+                    "media_id": draft_media_id,
+                    "html_hash": current_html_hash,
+                    "cover_hash": current_cover_hash
+                }
+                save_draft_cache(draft_cache, draft_cache_file)
+                
                 print("\n" + "="*40)
                 print("🚀 DRAFT UPDATE SUCCESSFUL!")
                 print(f"Draft MediaID: {draft_media_id}")
@@ -417,9 +454,15 @@ def main():
                         html_content=html_content,
                         thumb_media_id=thumb_media_id,
                         author=author,
-                        digest=digest
+                        digest=digest,
+                        need_open_comment=need_open_comment,
+                        only_fans_can_comment=only_fans_can_comment
                     )
-                    draft_cache[html_abs_path] = draft_media_id
+                    draft_cache[html_abs_path] = {
+                        "media_id": draft_media_id,
+                        "html_hash": current_html_hash,
+                        "cover_hash": current_cover_hash
+                    }
                     save_draft_cache(draft_cache, draft_cache_file)
                     print("\n" + "="*40)
                     print("🚀 DRAFT CREATION SUCCESSFUL!")
@@ -434,9 +477,15 @@ def main():
                 html_content=html_content,
                 thumb_media_id=thumb_media_id,
                 author=author,
-                digest=digest
+                digest=digest,
+                need_open_comment=need_open_comment,
+                only_fans_can_comment=only_fans_can_comment
             )
-            draft_cache[html_abs_path] = draft_media_id
+            draft_cache[html_abs_path] = {
+                "media_id": draft_media_id,
+                "html_hash": current_html_hash,
+                "cover_hash": current_cover_hash
+            }
             save_draft_cache(draft_cache, draft_cache_file)
             
             print("\n" + "="*40)

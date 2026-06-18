@@ -97,7 +97,9 @@ class TestSecondStageOptimizations(unittest.TestCase):
                 html_content=html_content,
                 thumb_media_id="mock_thumb_media_id",
                 author="测试作者",
-                digest="这是测试文章的摘要内容。"
+                digest="这是测试文章的摘要内容。",
+                need_open_comment=1,
+                only_fans_can_comment=0
             )
             print("✅ Successfully verified summary/digest is correctly passed to WeChat API client!")
             
@@ -107,6 +109,96 @@ class TestSecondStageOptimizations(unittest.TestCase):
             for path in [html_file.name, json_path, cover_path]:
                 if os.path.exists(path):
                     os.remove(path)
+
+    @patch('engine.publisher.WeChatClient')
+    @patch('builtins.input', return_value='y')
+    @patch('engine.publisher.process_content_images', lambda client, html, *args, **kwargs: html)
+    def test_draft_hash_cache_and_comments(self, mock_input, mock_wechat_client):
+        """Verify draft updates are skipped when hashes match, and comments settings are passed."""
+        mock_client_instance = MagicMock()
+        mock_wechat_client.return_value = mock_client_instance
+        mock_client_instance.upload_image.return_value = "mock_thumb_media_id"
+        mock_client_instance.create_draft.return_value = "mock_draft_media_id"
+        mock_client_instance.update_draft.return_value = None
+
+        import tempfile
+        import shutil
+        import json
+
+        # Setup temp files
+        temp_dir = tempfile.mkdtemp()
+        html_content = "<div>Test article body</div>"
+        metadata = {
+            "title": "测试文章标题",
+            "author": "测试作者",
+            "summary": "测试摘要",
+            "image": "test_cover.png",
+            "need_open_comment": 1,
+            "only_fans_can_comment": 1
+        }
+
+        html_file = os.path.join(temp_dir, "article.html")
+        with open(html_file, 'w', encoding='utf-8') as f:
+            f.write(html_content)
+
+        json_path = os.path.join(temp_dir, "article.json")
+        with open(json_path, 'w', encoding='utf-8') as f:
+            json.dump(metadata, f, ensure_ascii=False)
+
+        cover_path = os.path.join(temp_dir, "test_cover.png")
+        with open(cover_path, 'w') as f:
+            f.write("mock_image_data")
+
+        try:
+            # First run: create draft
+            sys_argv_backup = sys.argv
+            sys.argv = [
+                'wechat_publisher.py',
+                '-c', html_file,
+                '--appid', 'test_appid_123',
+                '--secret', 'test_secret_123',
+                '--cache-dir', temp_dir
+            ]
+
+            wechat_publisher.main()
+
+            # Verify create_draft call parameters (including comments)
+            mock_client_instance.create_draft.assert_called_once_with(
+                title="测试文章标题",
+                html_content=html_content,
+                thumb_media_id="mock_thumb_media_id",
+                author="测试作者",
+                digest="测试摘要",
+                need_open_comment=1,
+                only_fans_can_comment=1
+            )
+            mock_client_instance.create_draft.reset_mock()
+
+            # Second run: content has not changed. It should skip create_draft/update_draft.
+            wechat_publisher.main()
+            mock_client_instance.create_draft.assert_not_called()
+            mock_client_instance.update_draft.assert_not_called()
+
+            # Modify HTML content and run again: it should update draft.
+            html_content_mod = "<div>Test article body modified</div>"
+            with open(html_file, 'w', encoding='utf-8') as f:
+                f.write(html_content_mod)
+
+            wechat_publisher.main()
+            mock_client_instance.update_draft.assert_called_once_with(
+                media_id="mock_draft_media_id",
+                title="测试文章标题",
+                html_content=html_content_mod,
+                thumb_media_id="mock_thumb_media_id",
+                author="测试作者",
+                digest="测试摘要",
+                need_open_comment=1,
+                only_fans_can_comment=1
+            )
+
+        finally:
+            sys.argv = sys_argv_backup
+            shutil.rmtree(temp_dir)
 
 if __name__ == '__main__':
     unittest.main()

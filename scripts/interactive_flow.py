@@ -101,103 +101,17 @@ def run_stage_2(input_path, output_path, image_mapping_path):
             body = parts[2]
 
     if image_mapping_path and os.path.exists(image_mapping_path):
-        mapping = load_image_mapping(image_mapping_path)
-        
         tag_pattern = re.compile(r'(!?\[.*?\]\(.*?\)(?:\{.*?\})?)')
         parts = tag_pattern.split(body)
         
-        sorted_keys = sorted([k for k in mapping.keys() if len(k.strip()) >= 2], key=len, reverse=True)
-        
-        GENERIC_KEYWORDS = {'无人机', '导弹', '雷电', '燃烧瓶', '足球', '钻头', '激光', '守卫者', '榴莲', '砖头', '回旋镖'}
-        
-        seen_keys = set()
-        
         for i in range(len(parts)):
-            if i % 2 == 0:  # Plain text
-                chunk = parts[i]
-                
-                # Step A: Scan all occurrences of **【key】** or key for all keywords to mark occupied
-                all_occurrences = []
-                for key in sorted_keys:
-                    escaped_key = re.escape(key)
-                    if key in GENERIC_KEYWORDS:
-                        pattern = re.compile(rf'\*\*【{escaped_key}】\*\*|\*\*{escaped_key}\*\*|【{escaped_key}】')
-                    else:
-                        pattern = re.compile(rf'\*\*【{escaped_key}】\*\*|{escaped_key}')
-                    for m in pattern.finditer(chunk):
-                        all_occurrences.append((m.start(), m.end(), key, m.group(0)))
-                
-                # Sort occurrences: longest keys first
-                all_occurrences.sort(key=lambda x: (len(x[2]), -x[0]), reverse=True)
-                
-                temp_occupied = []
-                valid_occurrences = []
-                for start, end, key, matched_str in all_occurrences:
-                    # Check overlap
-                    overlap = False
-                    for o_start, o_end in temp_occupied:
-                        if not (end <= o_start or start >= o_end):
-                            overlap = True
-                            break
-                    if not overlap:
-                        temp_occupied.append((start, end))
-                        valid_occurrences.append((start, end, key, matched_str))
-                
-                # Step B: Process the valid occurrences front-to-back to decide matches
-                valid_occurrences.sort(key=lambda x: x[0])
-                matches = []
-                for start, end, key, matched_str in valid_occurrences:
-                    if is_in_header(chunk, start):
-                        continue
-                    if is_attribute_mention(chunk[end:]):
-                        continue
-                        
-                    already_has_image = False
+            if i % 2 == 1:  # Tag
+                tag = parts[i]
+                if tag.startswith('[') and 'img://' in tag:
+                    parts[i] = '!' + tag
                     
-                    # Check if followed by a markdown image in the same chunk (ignoring bolding/brackets)
-                    remaining = chunk[end:].lstrip('*_【】 ')
-                    if remaining.startswith('!['):
-                        already_has_image = True
-                    
-                    # Check if followed by a markdown image in the next chunk
-                    if not remaining and i + 1 < len(parts):
-                        next_part = parts[i+1].lstrip('*_【】 ')
-                        if next_part.startswith('!['):
-                            already_has_image = True
-                    
-                    # Check if followed by a markdown image separated by a few connector words/chars (e.g. 的套装)
-                    in_between = chunk[end:].strip('*_【】 ')
-                    if not already_has_image and len(in_between) <= 5 and i + 1 < len(parts):
-                        next_tag = parts[i+1]
-                        if next_tag.startswith(f"![{key}]") or next_tag.startswith(f"![{key}("):
-                            already_has_image = True
-                            
-                    if already_has_image:
-                        if key not in ['黄星', '红星']:
-                            seen_keys.add(key)
-                        continue
-                        
-                    # Check first-occurrence only
-                    if key in seen_keys and key not in ['黄星', '红星']:
-                        continue
-                        
-                    if key in ['黄星', '红星']:
-                        layout = '{type=icon}'
-                    else:
-                        layout = '{type=avatar}'
-                    
-                    formatted_str = f"{matched_str}![{key}](img://{key}){layout}"
-                    matches.append((start, end, formatted_str))
-                    seen_keys.add(key)
-                
-                # Replace back-to-front to preserve offsets
-                matches.sort(key=lambda x: x[0], reverse=True)
-                for start, end, formatted_str in matches:
-                    chunk = chunk[:start] + formatted_str + chunk[end:]
-                parts[i] = chunk
-                
         body = "".join(parts)
-        print("✔ 智能配图注入完成")
+        print("✔ 智能配图转换完成")
     else:
         print("⚠ 找不到图片映射字典，跳过配图注入")
 

@@ -135,7 +135,9 @@ class WeChatClient:
                      thumb_media_id: str,
                      author: str = "Admin",
                      digest: str = "",
-                     show_cover_pic: int = 1) -> str:
+                     show_cover_pic: int = 1,
+                     need_open_comment: int = 1,
+                     only_fans_can_comment: int = 0) -> str:
         """
         Creates a draft in the WeChat Official Account.
 
@@ -146,6 +148,8 @@ class WeChatClient:
             author: Article author.
             digest: Article summary (optional).
             show_cover_pic: 1 to show cover in article, 0 to hide.
+            need_open_comment: 1 to open comment, 0 to close.
+            only_fans_can_comment: 1 if only fans can comment, 0 if anyone.
 
         Returns:
             The media_id of the created draft.
@@ -163,8 +167,8 @@ class WeChatClient:
                     "content": html_content,
                     "thumb_media_id": thumb_media_id,
                     "show_cover_pic": show_cover_pic,
-                    "need_open_comment": 0,
-                    "only_fans_can_comment": 0
+                    "need_open_comment": need_open_comment,
+                    "only_fans_can_comment": only_fans_can_comment
                 }
             ]
         }
@@ -198,7 +202,9 @@ class WeChatClient:
                      index: int = 0,
                      author: str = "Admin",
                      digest: str = "",
-                     show_cover_pic: int = 1) -> None:
+                     show_cover_pic: int = 1,
+                     need_open_comment: int = 1,
+                     only_fans_can_comment: int = 0) -> None:
         """
         Updates an existing draft in the WeChat Official Account.
 
@@ -211,6 +217,8 @@ class WeChatClient:
             author: Article author.
             digest: Article summary (optional).
             show_cover_pic: 1 to show cover in article, 0 to hide.
+            need_open_comment: 1 to open comment, 0 to close.
+            only_fans_can_comment: 1 if only fans can comment, 0 if anyone.
         """
         token = self.get_access_token()
         url = f"{self.BASE_URL}/draft/update?access_token={token}"
@@ -226,8 +234,8 @@ class WeChatClient:
                 "content": html_content,
                 "thumb_media_id": thumb_media_id,
                 "show_cover_pic": show_cover_pic,
-                "need_open_comment": 0,
-                "only_fans_can_comment": 0
+                "need_open_comment": need_open_comment,
+                "only_fans_can_comment": only_fans_can_comment
             }
         }
 
