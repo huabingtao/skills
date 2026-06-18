@@ -444,14 +444,19 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
         if 'white-space: nowrap' in li_style:
             continue
             
-        text = li.get_text()
+        target = li
+        p_tag = li.find('p')
+        if p_tag:
+            target = p_tag
+            
+        text = target.get_text()
         colon_match = re.search(r'[:：]', text)
         if not colon_match:
             continue
             
         colon_idx = colon_match.start()
         
-        children = list(li.contents)
+        children = list(target.contents)
         nodes_to_wrap = []
         remaining_nodes = []
         current_len = 0
@@ -492,14 +497,14 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
                 current_len += child_len
                 
         if nodes_to_wrap:
-            li.clear()
+            target.clear()
             font_tag = soup.new_tag('font')
             font_tag['style'] = 'white-space: nowrap !important;'
             for node in nodes_to_wrap:
                 font_tag.append(node)
-            li.append(font_tag)
+            target.append(font_tag)
             for node in remaining_nodes:
-                li.append(node)
+                target.append(node)
 
     final_html = str(soup)
 
