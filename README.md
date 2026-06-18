@@ -67,8 +67,6 @@
 ├── scripts/                # 🚀 命令行 CLI 入口
 │   ├── compile.py          # 通用编译 CLI（支持 --pack 参数）
 │   ├── publish.py          # 通用发布 CLI
-│   ├── md_to_wechat.py     # 【向后兼容】调用 compile.py --pack packs/danke
-│   ├── wechat_publisher.py # 【向后兼容】调用 publish.py
 │   └── config.json         # 公众号 API 配置文件（已在.gitignore中排除）
 └── test/
     ├── test_optimization.md      # 外链、注音、防拉伸测试文稿
