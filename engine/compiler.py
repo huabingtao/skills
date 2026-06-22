@@ -457,6 +457,39 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
         if p_tag:
             target = p_tag
             
+        # Optimization: If the target starts with or contains a strong tag, and that strong tag
+        # is followed immediately by a colon in the next text node, pull the colon inside
+        # the strong tag and style the strong tag with nowrap. This avoids wrapping it in span,
+        # which prevents WeChat editor from splitting the list item text into block-level sections.
+        bold_colon_fixed = False
+        for strong in target.find_all('strong'):
+            sibling = strong.next_sibling
+            if sibling and (isinstance(sibling, str) or sibling.name is None):
+                sibling_text = str(sibling)
+                m = re.match(r'^([:：]\s*)', sibling_text)
+                if m:
+                    colon_part = m.group(1)
+                    # Append colon into strong tag
+                    strong.append(soup.new_string(colon_part))
+                    # Remove colon from sibling text node
+                    new_text = sibling_text[len(colon_part):]
+                    sibling.replace_with(soup.new_string(new_text))
+                    
+                    # Style strong tag with nowrap
+                    existing_style = strong.get('style', '').strip()
+                    nowrap_rule = "white-space: nowrap !important;"
+                    if existing_style:
+                        if not existing_style.endswith(';'):
+                            existing_style += ';'
+                        strong['style'] = existing_style + " " + nowrap_rule
+                    else:
+                        strong['style'] = nowrap_rule
+                    bold_colon_fixed = True
+                    break
+        
+        if bold_colon_fixed:
+            continue
+            
         text = target.get_text()
         colon_match = re.search(r'[:：]', text)
         if not colon_match:

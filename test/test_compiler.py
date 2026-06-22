@@ -107,33 +107,30 @@ class TestWeChatCompiler(unittest.TestCase):
         self.assertEqual(len(lis), 3)
 
         # 1. First li has bold prefix and Chinese colon
-        # Expected: <font style="white-space: nowrap !important;"><strong>专属效果</strong>：</font>对应S级装备破坏者风衣。
+        # Expected: <strong style="...white-space: nowrap !important;">专属效果：</strong>对应S级装备破坏者风衣。
         li1 = lis[0]
-        font1 = li1.find('font')
-        self.assertIsNotNone(font1)
-        self.assertEqual(font1.get('style'), 'white-space: nowrap !important;')
-        self.assertIn("专属效果", font1.text)
-        self.assertIn("：", font1.text)
-        self.assertNotIn("对应S级装备", font1.text)
-        # Check that <strong> is inside the font tag
-        self.assertEqual(font1.find('strong').text, "专属效果")
+        strong1 = li1.find('strong')
+        self.assertIsNotNone(strong1)
+        self.assertIn("white-space: nowrap", strong1.get('style', ''))
+        self.assertEqual(strong1.text, "专属效果：")
+        self.assertNotIn("对应S级装备", strong1.text)
 
         # 2. Second li has no bold but English colon followed by space
-        # Expected: <font style="white-space: nowrap !important;">培养建议: </font>推荐拉到3[红星]
+        # Expected: <span style="white-space: nowrap !important;">培养建议: </span>推荐拉到3[红星]
         li2 = lis[1]
-        font2 = li2.find('font')
-        self.assertIsNotNone(font2)
-        self.assertEqual(font2.get('style'), 'white-space: nowrap !important;')
-        self.assertEqual(font2.text, "培养建议: ")
-        self.assertNotIn("推荐拉到", font2.text)
+        span2 = li2.find('span')
+        self.assertIsNotNone(span2)
+        self.assertEqual(span2.get('style'), 'white-space: nowrap !important;')
+        self.assertEqual(span2.text, "培养建议: ")
+        self.assertNotIn("推荐拉到", span2.text)
 
         # 3. Third li is a star list item, which should have style="white-space: nowrap !important;" on the <li> tag itself,
-        # and NOT have nested colon nowrap font wrapper (since we skipped it).
+        # and NOT have nested colon nowrap span wrapper (since we skipped it).
         li3 = lis[2]
         self.assertIn("white-space: nowrap", li3.get('style', ''))
-        # Ensure it doesn't have the nowrap font tag wrapping the colon
-        font3 = li3.find('font', attrs={'style': 'white-space: nowrap !important;'})
-        self.assertIsNone(font3)
+        # Ensure it doesn't have the nowrap span tag wrapping the colon
+        span3 = li3.find('span', attrs={'style': 'white-space: nowrap !important;'})
+        self.assertIsNone(span3)
 
 if __name__ == '__main__':
     unittest.main()
