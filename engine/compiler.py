@@ -604,15 +604,16 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
                 
         if nodes_to_wrap:
             td.clear()
+            
+            # Prepend a non-breaking space (\u00a0) directly to the td cell (before the span)
+            # to make sure the cell content starts with a text node rather than an element.
+            # This prevents WeChat's editor (ProseMirror) from wrapping starting image tags
+            # in `<section nodeleaf>` block tags and causing line breaks inside table cells.
+            zw_space = soup.new_string('\u00a0')
+            td.append(zw_space)
+            
             span_tag = soup.new_tag('span')
             span_tag['style'] = 'white-space: nowrap !important;'
-            
-            # Prepend a non-breaking space (\u00a0) to prevent WeChat's editor (ProseMirror) 
-            # from wrapping starting image tags in `<section nodeleaf>` block tags.
-            # A non-breaking space is never stripped by WeChat's paste filter.
-            zw_space = soup.new_string('\u00a0')
-            span_tag.append(zw_space)
-            
             for node in nodes_to_wrap:
                 span_tag.append(node)
             td.append(span_tag)
