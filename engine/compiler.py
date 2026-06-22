@@ -284,6 +284,11 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
     # Parse with BeautifulSoup for structural modifications
     soup = BeautifulSoup(html, 'html.parser')
 
+    # Remove nested strong tags (flattening) to prevent WeChat editor copy-paste line breaks
+    for strong in list(soup.find_all('strong')):
+        if strong.find_parent('strong'):
+            strong.unwrap()
+
     # Apply CSS Theme stylesheets
     apply_css_theme(soup, theme_path)
 
