@@ -457,35 +457,50 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
         if p_tag:
             target = p_tag
             
-        # Optimization: If the target starts with or contains a strong tag, and that strong tag
-        # is followed immediately by a colon in the next text node, pull the colon inside
-        # the strong tag and style the strong tag with nowrap. This avoids wrapping it in span,
-        # which prevents WeChat editor from splitting the list item text into block-level sections.
         bold_colon_fixed = False
         for strong in target.find_all('strong'):
-            sibling = strong.next_sibling
-            if sibling and (isinstance(sibling, str) or sibling.name is None):
-                sibling_text = str(sibling)
-                m = re.match(r'^([:：]\s*)', sibling_text)
-                if m:
-                    colon_part = m.group(1)
-                    # Append colon into strong tag
-                    strong.append(soup.new_string(colon_part))
-                    # Remove colon from sibling text node
-                    new_text = sibling_text[len(colon_part):]
-                    sibling.replace_with(soup.new_string(new_text))
-                    
-                    # Style strong tag with nowrap
-                    existing_style = strong.get('style', '').strip()
-                    nowrap_rule = "white-space: nowrap !important;"
-                    if existing_style:
-                        if not existing_style.endswith(';'):
-                            existing_style += ';'
-                        strong['style'] = existing_style + " " + nowrap_rule
-                    else:
-                        strong['style'] = nowrap_rule
-                    bold_colon_fixed = True
+            siblings_to_move = []
+            curr = strong.next_sibling
+            colon_found = False
+            colon_part = None
+            remaining_text = None
+            
+            while curr:
+                if getattr(curr, 'name', None) in ('strong', 'br', 'p', 'div', 'section', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'td', 'tr', 'table'):
                     break
+                elif not getattr(curr, 'name', None) and isinstance(curr, str):
+                    curr_text = str(curr)
+                    m = re.match(r'^(\s*[:：]\s*)', curr_text)
+                    if m:
+                        colon_part = m.group(1)
+                        remaining_text = curr_text[len(colon_part):]
+                        colon_found = True
+                        break
+                    else:
+                        break
+                else:
+                    siblings_to_move.append(curr)
+                curr = curr.next_sibling
+                
+            if colon_found:
+                for sib in siblings_to_move:
+                    strong.append(sib)
+                strong.append(soup.new_string(colon_part))
+                if curr:
+                    if remaining_text:
+                        curr.replace_with(soup.new_string(remaining_text))
+                    else:
+                        curr.extract()
+                
+                existing_style = strong.get('style', '').strip()
+                nowrap_rule = "white-space: nowrap !important;"
+                if existing_style:
+                    if not existing_style.endswith(';'):
+                        existing_style += ';'
+                    strong['style'] = existing_style + " " + nowrap_rule
+                else:
+                    strong['style'] = nowrap_rule
+                bold_colon_fixed = True
         
         if bold_colon_fixed:
             continue
@@ -562,6 +577,55 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
         if colon_idx > 40:
             continue
             
+        # First, try optimization: if td contains strong tags, pull subsequent inline elements and colons inside
+        bold_colon_fixed = False
+        for strong in td.find_all('strong'):
+            siblings_to_move = []
+            curr = strong.next_sibling
+            colon_found = False
+            colon_part = None
+            remaining_text = None
+            
+            while curr:
+                if getattr(curr, 'name', None) in ('strong', 'br', 'p', 'div', 'section', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'td', 'tr', 'table'):
+                    break
+                elif not getattr(curr, 'name', None) and isinstance(curr, str):
+                    curr_text = str(curr)
+                    m = re.match(r'^(\s*[:：]\s*)', curr_text)
+                    if m:
+                        colon_part = m.group(1)
+                        remaining_text = curr_text[len(colon_part):]
+                        colon_found = True
+                        break
+                    else:
+                        break
+                else:
+                    siblings_to_move.append(curr)
+                curr = curr.next_sibling
+                
+            if colon_found:
+                for sib in siblings_to_move:
+                    strong.append(sib)
+                strong.append(soup.new_string(colon_part))
+                if curr:
+                    if remaining_text:
+                        curr.replace_with(soup.new_string(remaining_text))
+                    else:
+                        curr.extract()
+                
+                existing_style = strong.get('style', '').strip()
+                nowrap_rule = "white-space: nowrap !important;"
+                if existing_style:
+                    if not existing_style.endswith(';'):
+                        existing_style += ';'
+                    strong['style'] = existing_style + " " + nowrap_rule
+                else:
+                    strong['style'] = nowrap_rule
+                bold_colon_fixed = True
+                
+        if bold_colon_fixed:
+            continue
+            
         children = list(td.contents)
         nodes_to_wrap = []
         remaining_nodes = []
@@ -580,12 +644,12 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
                 found = True
                 rel_idx = colon_idx - current_len
                 
-                # Check if it's a text node
+                # Check if it's a text node (NavigableString/str or has no name)
                 if not hasattr(child, 'name') or child.name is None:
                     left_text = child[:rel_idx + 1]
                     right_text = child[rel_idx + 1:]
                     
-                    # Consume any trailing spaces
+                    # Consume any trailing spaces to include them in nowrap
                     spaces = ""
                     while right_text and right_text[0] in (' ', '\t'):
                         spaces += right_text[0]
@@ -607,8 +671,6 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
             
             # Prepend a non-breaking space (\u00a0) directly to the td cell (before the span)
             # to make sure the cell content starts with a text node rather than an element.
-            # This prevents WeChat's editor (ProseMirror) from wrapping starting image tags
-            # in `<section nodeleaf>` block tags and causing line breaks inside table cells.
             zw_space = soup.new_string('\u00a0')
             td.append(zw_space)
             
