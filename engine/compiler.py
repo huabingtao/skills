@@ -230,6 +230,10 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
         flags=re.MULTILINE
     )
 
+    # 0.5 Preprocess icon shorthand: {{名称}} -> **名称**![名称](img://名称){type=icon}
+    # Must run before Ruby annotation preprocessing (which uses single {})
+    md_content = re.sub(r'\{\{([^}]+)\}\}', r'**\1**![\1](img://\1){type=icon}', md_content)
+
     # 1. Preprocess Ruby Annotations: [文字]{注音} -> <ruby>文字<rt>注音</rt></ruby>
     md_content = re.sub(r'\[([^\]\n]+)\]\{([^\}\n]+)\}', r'<ruby>\1<rt>\2</rt></ruby>', md_content)
 
