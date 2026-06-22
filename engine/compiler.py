@@ -506,13 +506,85 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
                 
         if nodes_to_wrap:
             target.clear()
-            font_tag = soup.new_tag('font')
-            font_tag['style'] = 'white-space: nowrap !important;'
+            span_tag = soup.new_tag('span')
+            span_tag['style'] = 'white-space: nowrap !important;'
             for node in nodes_to_wrap:
-                font_tag.append(node)
-            target.append(font_tag)
+                span_tag.append(node)
+            target.append(span_tag)
             for node in remaining_nodes:
                 target.append(node)
+
+    # Prevent line breaks around the first colon in table cells (e.g. "盾伤: ...")
+    for td in soup.find_all('td'):
+        td_style = td.get('style', '')
+        if 'white-space: nowrap' in td_style:
+            continue
+            
+        text = td.get_text()
+        colon_match = re.search(r'[:：]', text)
+        if not colon_match:
+            continue
+            
+        colon_idx = colon_match.start()
+        if colon_idx > 40:
+            continue
+            
+        children = list(td.contents)
+        nodes_to_wrap = []
+        remaining_nodes = []
+        current_len = 0
+        found = False
+        
+        for child in children:
+            if found:
+                remaining_nodes.append(child)
+                continue
+                
+            child_text = child.get_text() if hasattr(child, 'get_text') else str(child)
+            child_len = len(child_text)
+            
+            if current_len <= colon_idx < current_len + child_len:
+                found = True
+                rel_idx = colon_idx - current_len
+                
+                # Check if it's a text node
+                if not hasattr(child, 'name') or child.name is None:
+                    left_text = child[:rel_idx + 1]
+                    right_text = child[rel_idx + 1:]
+                    
+                    # Consume any trailing spaces
+                    spaces = ""
+                    while right_text and right_text[0] in (' ', '\t'):
+                        spaces += right_text[0]
+                        right_text = right_text[1:]
+                        
+                    left_node = soup.new_string(left_text + spaces)
+                    nodes_to_wrap.append(left_node)
+                    if right_text:
+                        right_node = soup.new_string(right_text)
+                        remaining_nodes.append(right_node)
+                else:
+                    nodes_to_wrap.append(child)
+            else:
+                nodes_to_wrap.append(child)
+                current_len += child_len
+                
+        if nodes_to_wrap:
+            td.clear()
+            span_tag = soup.new_tag('span')
+            span_tag['style'] = 'white-space: nowrap !important;'
+            
+            # Prepend a non-breaking space (\u00a0) to prevent WeChat's editor (ProseMirror) 
+            # from wrapping starting image tags in `<section nodeleaf>` block tags.
+            # A non-breaking space is never stripped by WeChat's paste filter.
+            zw_space = soup.new_string('\u00a0')
+            span_tag.append(zw_space)
+            
+            for node in nodes_to_wrap:
+                span_tag.append(node)
+            td.append(span_tag)
+            for node in remaining_nodes:
+                td.append(node)
 
     final_html = str(soup)
 
