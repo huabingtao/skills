@@ -230,9 +230,26 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
         flags=re.MULTILINE
     )
 
-    # 0.5 Preprocess icon shorthand: {{名称}} -> **名称**![名称](img://名称){type=icon}
+    # 0.5 Preprocess image shorthand: {{名称}} or {{名称|type=card}} etc.
+    # - {{名称}} -> **名称**![名称](img://名称){type=icon}  (default: bold + icon)
+    # - {{名称|type=icon}} or {{名称|type=avatar}} -> **名称**![名称](img://名称){type=...}  (inline: bold + image)
+    # - {{名称|type=card}} etc. -> ![名称](img://名称){type=card}  (block: image only)
     # Must run before Ruby annotation preprocessing (which uses single {})
-    md_content = re.sub(r'\{\{([^}]+)\}\}', r'**\1**![\1](img://\1){type=icon}', md_content)
+    _inline_img_types = {'icon', 'avatar'}
+    def _expand_shorthand(m):
+        content = m.group(1)
+        if '|' in content:
+            name, params = content.split('|', 1)
+            name, params = name.strip(), params.strip()
+        else:
+            name, params = content.strip(), 'type=icon'
+        type_m = re.search(r'type=(\S+)', params)
+        img_type = type_m.group(1).split(';')[0] if type_m else 'icon'
+        img_ref = '![' + name + '](img://' + name + '){' + params + '}'
+        if img_type in _inline_img_types:
+            return '**' + name + '**' + img_ref
+        return img_ref
+    md_content = re.sub(r'\{\{([^}]+)\}\}', _expand_shorthand, md_content)
 
     # 1. Preprocess Ruby Annotations: [文字]{注音} -> <ruby>文字<rt>注音</rt></ruby>
     md_content = re.sub(r'\[([^\]\n]+)\]\{([^\}\n]+)\}', r'<ruby>\1<rt>\2</rt></ruby>', md_content)
