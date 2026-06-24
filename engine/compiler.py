@@ -823,6 +823,57 @@ def convert_to_optimized_markdown(md_content, project_config, input_dir=None):
         rules = load_highlight_rules(highlight_rules_path)
         md_content = apply_highlight_rules(md_content, rules)
 
+    def translate_params_to_pandoc(params_str):
+        params = {}
+        for p in params_str.split(';'):
+            if '=' in p:
+                k, v = p.split('=', 1)
+                params[k.strip()] = v.strip()
+                
+        img_type = params.get('type')
+        width_val = None
+        height_val = None
+        
+        if img_type in ('icon', 'center') or params.get('icon') == 'card':
+            if img_type == 'icon' or params.get('icon') == 'card':
+                width_val, height_val = '24px', '24px'
+            else:
+                w = params.get('w')
+                if w:
+                    width_val = w + 'px' if w.isdigit() else w
+                h = params.get('h')
+                if h:
+                    height_val = h + 'px' if h.isdigit() else h
+        elif img_type in ('avatar', 'acatar'):
+            width_val, height_val = '30px', '30px'
+        elif img_type in ('float-left', 'float-right'):
+            width_val, height_val = '80px', '80px'
+        elif img_type == 'card':
+            width_val = '90%'
+        elif img_type == 'banner':
+            width_val = '100%'
+        elif img_type == 'grid2':
+            width_val = '48%'
+        elif img_type == 'grid3':
+            width_val = '31.3%'
+        elif img_type == 'grid4':
+            width_val = '23%'
+        else:
+            w = params.get('w')
+            if w:
+                width_val = w + 'px' if w.isdigit() else w
+            h = params.get('h')
+            if h:
+                height_val = h + 'px' if h.isdigit() else h
+                
+        out_parts = []
+        if width_val:
+            out_parts.append(f'width={width_val}')
+        if height_val:
+            out_parts.append(f'height={height_val}')
+            
+        return ' '.join(out_parts)
+
     # 5. Resolve all image paths in markdown syntax: ![alt](src)
     def _replace_markdown_img(m):
         alt = m.group(1)
@@ -830,6 +881,17 @@ def convert_to_optimized_markdown(md_content, project_config, input_dir=None):
         resolved_src = resolve_img_src(src)
         return '![' + alt + '](' + resolved_src + ')'
     md_content = re.sub(r'!\[([^\]\n]*)\]\(([^)\n]+)\)', _replace_markdown_img, md_content)
+
+    # 5.5 Translate styling params (like `{type=icon}`) to Pandoc attributes
+    def _translate_image_attrs(match):
+        alt = match.group(1)
+        src = match.group(2)
+        attrs = match.group(3)
+        translated = translate_params_to_pandoc(attrs)
+        if translated:
+            return f'![{alt}]({src}){{{translated}}}'
+        return f'![{alt}]({src})'
+    md_content = re.sub(r'!\[([^\]\n]*)\]\(([^)\n]+)\)\{(.*?)\}', _translate_image_attrs, md_content)
 
     # 6. Resolve all image paths in HTML img tags if any: <img src="src" ...>
     def _replace_html_img(m):
