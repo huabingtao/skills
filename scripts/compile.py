@@ -17,7 +17,7 @@ import json
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
-from engine.compiler import convert_to_wechat_html
+from engine.compiler import convert_to_wechat_html, convert_to_optimized_markdown
 
 
 def load_project_config(pack_dir, theme_override=None):
@@ -134,6 +134,12 @@ def main():
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(wechat_html)
 
+        # Save Optimized Markdown
+        optimized_md = convert_to_optimized_markdown(content, project_config, input_dir=input_dir)
+        output_md_path = os.path.splitext(output_path)[0] + ".md"
+        with open(output_md_path, "w", encoding="utf-8") as f:
+            f.write(optimized_md)
+
         # Save Metadata
         if metadata:
             import datetime
@@ -147,6 +153,7 @@ def main():
                 json.dump(metadata, f, ensure_ascii=False, indent=2, default=json_serial)
 
         print("✅ Successfully converted '" + str(input_path) + "' → '" + str(output_path) + "'")
+        print("✅ Optimized Markdown saved to '" + str(output_md_path) + "'")
         if metadata:
             print("✅ Metadata saved to '" + str(meta_path) + "'")
 

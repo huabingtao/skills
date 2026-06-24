@@ -704,3 +704,161 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
     wrapped_html = '<meta name="referrer" content="no-referrer">\n<div style="' + container_style + '">\n' + final_html + '\n</div>'
 
     return wrapped_html, metadata
+
+
+def convert_to_optimized_markdown(md_content, project_config, input_dir=None):
+    """
+    Converts Markdown content to an optimized Markdown version, resolving all shorthand,
+    image mappings, cover image, and highlight rules, while keeping the Markdown syntax.
+    """
+    assets_dir = project_config.get("assets_dir")
+    image_mapping_path = project_config.get("image_mapping_path")
+    highlight_rules_path = project_config.get("highlight_rules_path")
+    placeholder_dir = project_config.get("placeholder_dir") or (assets_dir and os.path.join(assets_dir, "img"))
+    
+    if placeholder_dir:
+        ensure_placeholder_exists(placeholder_dir)
+
+    assets_cache = scan_assets(assets_dir) if assets_dir else {}
+    image_mapping = load_image_mapping(image_mapping_path) if image_mapping_path else {}
+
+    def check_file_exists(p, input_dir=None):
+        if not p:
+            return False
+        if os.path.isabs(p) and os.path.exists(p):
+            return True
+        if assets_dir and os.path.exists(os.path.join(assets_dir, "..", p)):
+            return True
+        if input_dir and os.path.exists(os.path.join(input_dir, p)):
+            return True
+        return False
+
+    def get_relative_to_project(p, input_dir=None):
+        project_root = os.path.dirname(assets_dir) if assets_dir else ""
+        if not project_root:
+            return p
+        if os.path.isabs(p):
+            try:
+                rel = os.path.relpath(p, project_root).replace('\\', '/')
+                if not rel.startswith('..'):
+                    return rel
+            except ValueError:
+                pass
+            return p
+        if input_dir and os.path.exists(os.path.join(input_dir, p)):
+            abs_p = os.path.abspath(os.path.join(input_dir, p))
+            try:
+                rel = os.path.relpath(abs_p, project_root).replace('\\', '/')
+                if not rel.startswith('..'):
+                    return rel
+            except ValueError:
+                pass
+            return abs_p
+        return p
+
+    def resolve_img_src(src):
+        src = src.strip()
+        if not src:
+            return src
+        if src.startswith(('http://', 'https://')):
+            return src
+            
+        src_clean = src.replace('img://', '')
+        base_name = os.path.basename(src_clean)
+        key_name = os.path.splitext(base_name)[0]
+        
+        resolved = None
+        mapped_path = image_mapping.get(src_clean) or image_mapping.get(base_name) or image_mapping.get(key_name)
+        if mapped_path and check_file_exists(mapped_path, input_dir):
+            resolved = get_relative_to_project(mapped_path, input_dir)
+        elif check_file_exists(src_clean, input_dir):
+            resolved = get_relative_to_project(src_clean, input_dir)
+        else:
+            fallback_match = assets_cache.get(key_name.lower()) or assets_cache.get(base_name.lower())
+            if fallback_match:
+                resolved = get_relative_to_project(fallback_match, input_dir)
+            else:
+                placeholder_path = "assets/img/占位图.png"
+                if check_file_exists(placeholder_path):
+                    resolved = placeholder_path
+        return resolved or src
+
+    metadata = {}
+    # Extract Frontmatter
+    if md_content.startswith('---'):
+        parts = re.split(r'^---', md_content, maxsplit=2, flags=re.MULTILINE)
+        if len(parts) >= 3:
+            try:
+                metadata = yaml.safe_load(parts[1]) or {}
+                md_content = parts[2]
+            except Exception as e:
+                print("⚠ Warning: Failed to parse frontmatter: " + str(e))
+
+    # Preprocess list items
+    md_content = re.sub(r'^[ \t]*[*+-]\s*$\n?', '', md_content, flags=re.MULTILINE)
+    md_content = re.sub(r'^[ \t]*\d+\.\s*$\n?', '', md_content, flags=re.MULTILINE)
+    md_content = re.sub(r'(^[ \t]*[*+-]\s+[^\n]+)\n[ \t]*[:：]\s*', r'\1：', md_content, flags=re.MULTILINE)
+    md_content = re.sub(r'(^[ \t]*\d+\.\s+[^\n]+)\n[ \t]*[:：]\s*', r'\1：', md_content, flags=re.MULTILINE)
+    md_content = re.sub(r'^[ \t]*>\s*\[!(IMPORTANT|TIP|NOTE|WARNING|CAUTION)\][ \t]*\n?', '', md_content, flags=re.IGNORECASE | re.MULTILINE)
+
+    # 1. Expand shorthands {{名称}} -> ![名称](img://名称){type=icon}
+    def _expand_shorthand(m):
+        content = m.group(1)
+        if '|' in content:
+            name, params = content.split('|', 1)
+            name, params = name.strip(), params.strip()
+        else:
+            name, params = content.strip(), 'type=icon'
+        return '![' + name + '](img://' + name + '){' + params + '}'
+    md_content = re.sub(r'\{\{([^}]+)\}\}', _expand_shorthand, md_content)
+
+    # 2. Ruby Annotations [文字]{注音} -> <ruby>文字<rt>注音</rt></ruby>
+    md_content = re.sub(r'\[([^\]\n]+)\]\{([^\}\n]+)\}', r'<ruby>\1<rt>\2</rt></ruby>', md_content)
+
+    # 3. Link-style image references [name](img://path) to ![name](img://path)
+    md_content = re.sub(r'(?<!\!)\[([^\]\n]+)\]\((img://[^\)\n]+)\)', r'![\1](\2)', md_content)
+
+    # 4. Apply highlight rules
+    if highlight_rules_path:
+        rules = load_highlight_rules(highlight_rules_path)
+        md_content = apply_highlight_rules(md_content, rules)
+
+    # 5. Resolve all image paths in markdown syntax: ![alt](src)
+    def _replace_markdown_img(m):
+        alt = m.group(1)
+        src = m.group(2)
+        resolved_src = resolve_img_src(src)
+        return '![' + alt + '](' + resolved_src + ')'
+    md_content = re.sub(r'!\[([^\]\n]*)\]\(([^)\n]+)\)', _replace_markdown_img, md_content)
+
+    # 6. Resolve all image paths in HTML img tags if any: <img src="src" ...>
+    def _replace_html_img(m):
+        before = m.group(1)
+        src = m.group(2)
+        after = m.group(3)
+        resolved_src = resolve_img_src(src)
+        return '<img ' + before + 'src="' + resolved_src + '"' + after + '>'
+    md_content = re.sub(r'<img\s+([^>]*?)src=["\'](img://[^"\']+|[^"\']+)["\']([^>]*?)>', _replace_html_img, md_content)
+
+    # 7. Resolve Cover Image in Metadata
+    cover = metadata.get('image')
+    if cover:
+        resolved_cover = resolve_img_src(cover)
+        if resolved_cover:
+            metadata['image'] = resolved_cover
+
+    # Reconstruct the optimized Markdown file
+    output_parts = []
+    if metadata:
+        output_parts.append('---')
+        try:
+            yaml_str = yaml.safe_dump(metadata, allow_unicode=True, default_flow_style=False, sort_keys=False)
+            output_parts.append(yaml_str.strip())
+        except Exception:
+            yaml_str = yaml.dump(metadata, allow_unicode=True, default_flow_style=False)
+            output_parts.append(yaml_str.strip())
+        output_parts.append('---\n')
+    
+    output_parts.append(md_content.lstrip('\n'))
+    return '\n'.join(output_parts)
+
