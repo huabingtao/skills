@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, PROJECT_ROOT)
 
-from engine import publisher
+from engine import publisher, scan_assets, clear_scan_assets_cache
 
 class TestWeChatCaching(unittest.TestCase):
     def setUp(self):
@@ -87,5 +87,64 @@ class TestWeChatCaching(unittest.TestCase):
         mock_client.upload_content_image.assert_not_called()
         print("✅ Cache flow verification succeeded!")
 
+class TestScanAssetsCaching(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "temp_assets_test")
+        os.makedirs(self.temp_dir, exist_ok=True)
+        clear_scan_assets_cache()
+
+    def tearDown(self):
+        if os.path.exists(self.temp_dir):
+            shutil.rmtree(self.temp_dir)
+        clear_scan_assets_cache()
+
+    def test_scan_assets_caching_and_invalidation(self):
+        # 1. Prepare some files in temp directory
+        file1 = os.path.join(self.temp_dir, "test_file_1.png")
+        with open(file1, "w") as f:
+            f.write("data")
+
+        # First scan should populate the cache
+        res1 = scan_assets(self.temp_dir)
+        self.assertIn("test_file_1.png", res1)
+        self.assertIn("test_file_1", res1)
+
+        # 2. Add a new file to the directory
+        file2 = os.path.join(self.temp_dir, "test_file_2.png")
+        with open(file2, "w") as f:
+            f.write("data2")
+
+        # Second scan should hit cache and NOT see test_file_2.png
+        res2 = scan_assets(self.temp_dir)
+        self.assertNotIn("test_file_2.png", res2)
+        self.assertNotIn("test_file_2", res2)
+
+        # 3. Clear cache and scan again
+        clear_scan_assets_cache()
+        res3 = scan_assets(self.temp_dir)
+        self.assertIn("test_file_2.png", res3)
+        self.assertIn("test_file_2", res3)
+
+    def test_scan_assets_pruning(self):
+        # Create a venv folder and a file inside it
+        venv_dir = os.path.join(self.temp_dir, "venv")
+        os.makedirs(venv_dir, exist_ok=True)
+        ignored_file = os.path.join(venv_dir, "venv_file.png")
+        with open(ignored_file, "w") as f:
+            f.write("venv_data")
+
+        # Create a normal file
+        normal_file = os.path.join(self.temp_dir, "normal_file.png")
+        with open(normal_file, "w") as f:
+            f.write("normal_data")
+
+        res = scan_assets(self.temp_dir)
+        # Normal file should be scanned
+        self.assertIn("normal_file.png", res)
+        # Ignored file in venv should NOT be scanned
+        self.assertNotIn("venv_file.png", res)
+
+
 if __name__ == "__main__":
     unittest.main()
+

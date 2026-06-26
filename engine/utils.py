@@ -11,6 +11,9 @@ import zlib
 import json
 
 
+_SCAN_ASSETS_CACHE = {}
+
+
 def scan_assets(assets_dir):
     """
     Scans the assets directory recursively and returns a dict mapping
@@ -21,11 +24,20 @@ def scan_assets(assets_dir):
     hardcoded project root, this version stores absolute paths so callers
     can decide how to relativize them.
     """
+    if not assets_dir:
+        return {}
+
+    abs_dir = os.path.abspath(assets_dir)
+    if abs_dir in _SCAN_ASSETS_CACHE:
+        return _SCAN_ASSETS_CACHE[abs_dir].copy()
+
     assets_cache = {}
-    if not os.path.exists(assets_dir):
+    if not os.path.exists(abs_dir):
         return assets_cache
 
-    for root, dirs, files in os.walk(assets_dir):
+    for root, dirs, files in os.walk(abs_dir):
+        # Prune directories in-place to avoid walking down env or git directories
+        dirs[:] = [d for d in dirs if d not in ('venv', '.venv', '.git', '__pycache__', 'node_modules')]
         for file in files:
             if file.startswith('.'):
                 continue
@@ -33,7 +45,18 @@ def scan_assets(assets_dir):
             abs_path = os.path.join(root, file)
             assets_cache[name.lower()] = abs_path
             assets_cache[file.lower()] = abs_path
-    return assets_cache
+
+    _SCAN_ASSETS_CACHE[abs_dir] = assets_cache
+    return assets_cache.copy()
+
+
+def clear_scan_assets_cache():
+    """
+    Clears the scan_assets static cache.
+    Useful for tests or manual invalidation.
+    """
+    global _SCAN_ASSETS_CACHE
+    _SCAN_ASSETS_CACHE.clear()
 
 
 def ensure_placeholder_exists(placeholder_dir):
