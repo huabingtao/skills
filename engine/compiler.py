@@ -306,8 +306,9 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
     # Apply CSS Theme stylesheets
     apply_css_theme(soup, theme_path)
 
-    # Parse Custom Image Styles: image sibling `{type=...}` tags
+    # Process images: style tags, clean width/height, and resolve paths in a single pass
     for img in soup.find_all('img'):
+        # 1. Parse Custom Image Styles
         sibling = img.next_sibling
         if sibling and isinstance(sibling, str):
             stripped_sibling = sibling.lstrip()
@@ -323,15 +324,11 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
                             
                     apply_image_node_styles(img, params)
                     
-                    # Remove curly braces styling text from the text node
-                    # Keep any remaining trailing characters
                     rest = stripped_sibling[match.end():]
-                    # Restore original leading space if any
                     orig_space = sibling[:len(sibling)-len(stripped_sibling)]
                     sibling.replace_with(orig_space + rest)
 
-    # Clean Image width/height attributes (convert them to inline styles)
-    for img in soup.find_all('img'):
+        # 2. Clean Image width/height attributes
         width = img.get('width')
         height = img.get('height')
         
@@ -357,39 +354,34 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
             else:
                 img['style'] = new_styles
 
-    # Resolve all image paths intelligently (supporting img://, bare name, or partial paths)
-    for img in soup.find_all('img'):
+        # 3. Resolve all image paths intelligently
         src = img.get('src', '').strip()
-        if not src:
-            continue
-        if src.startswith(('http://', 'https://')):
-            continue
+        if src and not src.startswith(('http://', 'https://')):
+            src_clean = src.replace('img://', '')
+            base_name = os.path.basename(src_clean)
+            key_name = os.path.splitext(base_name)[0]
             
-        src_clean = src.replace('img://', '')
-        base_name = os.path.basename(src_clean)
-        key_name = os.path.splitext(base_name)[0]
-        
-        resolved = None
-        mapped_path = image_mapping.get(src_clean) or image_mapping.get(base_name) or image_mapping.get(key_name)
-        if mapped_path and check_file_exists(mapped_path, input_dir):
-            resolved = get_relative_to_project(mapped_path, input_dir)
-        elif check_file_exists(src_clean, input_dir):
-            resolved = get_relative_to_project(src_clean, input_dir)
-        else:
-            fallback_match = assets_cache.get(key_name.lower()) or assets_cache.get(base_name.lower())
-            if fallback_match:
-                print("ℹ Auto-resolved missing image '" + str(src) + "' via folder scanning to: " + str(fallback_match))
-                resolved = get_relative_to_project(fallback_match, input_dir)
+            resolved = None
+            mapped_path = image_mapping.get(src_clean) or image_mapping.get(base_name) or image_mapping.get(key_name)
+            if mapped_path and check_file_exists(mapped_path, input_dir):
+                resolved = get_relative_to_project(mapped_path, input_dir)
+            elif check_file_exists(src_clean, input_dir):
+                resolved = get_relative_to_project(src_clean, input_dir)
             else:
-                placeholder_path = "assets/img/占位图.png"
-                if check_file_exists(placeholder_path):
-                    print("⚠ Warning: Image '" + str(src) + "' not found on disk or mapping. Falling back to placeholder.")
-                    resolved = placeholder_path
+                fallback_match = assets_cache.get(key_name.lower()) or assets_cache.get(base_name.lower())
+                if fallback_match:
+                    print("ℹ Auto-resolved missing image '" + str(src) + "' via folder scanning to: " + str(fallback_match))
+                    resolved = get_relative_to_project(fallback_match, input_dir)
                 else:
-                    print("⚠ Warning: Image '" + str(src) + "' not found, and placeholder not found at '" + str(placeholder_path) + "'")
-        
-        if resolved:
-            img['src'] = resolved
+                    placeholder_path = "assets/img/占位图.png"
+                    if check_file_exists(placeholder_path):
+                        print("⚠ Warning: Image '" + str(src) + "' not found on disk or mapping. Falling back to placeholder.")
+                        resolved = placeholder_path
+                    else:
+                        print("⚠ Warning: Image '" + str(src) + "' not found, and placeholder not found at '" + str(placeholder_path) + "'")
+            
+            if resolved:
+                img['src'] = resolved
 
     # Convert External Hyperlinks to Footnotes
     external_links = []
@@ -445,9 +437,11 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
             if not child.name and isinstance(child, str) and not child.strip():
                 child.extract()
 
-    # Apply nowrap inline style to star list items to prevent mobile wrapping
+    # Process list items: star list item nowrap and colon wrapping prevention in a single pass
     for li in soup.find_all('li'):
+        # 1. Apply nowrap inline style to star list items to prevent mobile wrapping
         text = li.get_text().strip()
+        is_star_list_item = False
         if text and text[0].isdigit() and ('：' in text or ': ' in text):
             if any(img.get('alt') in ('红星', '黄星') for img in li.find_all('img')) or '星' in text:
                 existing_style = li.get('style', '').strip()
@@ -458,12 +452,10 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
                     li['style'] = existing_style + " " + nowrap_rule
                 else:
                     li['style'] = nowrap_rule
+                is_star_list_item = True
 
-    # Prevent line breaks around the first colon in list items (e.g. "专属效果：...")
-    for li in soup.find_all('li'):
-        # Skip star list items which are already fully nowrap
-        li_style = li.get('style', '')
-        if 'white-space: nowrap' in li_style:
+        # 2. Prevent line breaks around the first colon in list items
+        if is_star_list_item:
             continue
             
         target = li

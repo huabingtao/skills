@@ -138,6 +138,7 @@ def process_content_images(client, html_content, base_dir, cache, cache_file):
                     # Recursive search fallback under project_root
                     norm_src = clean_src.replace('\\', '/')
                     for r, d, files in os.walk(project_root):
+                        d[:] = [dirname for dirname in d if dirname not in ('venv', '.venv', '.git', '__pycache__', 'node_modules')]
                         for f in files:
                             full_f = os.path.join(r, f).replace('\\', '/')
                             if full_f.endswith(norm_src):
@@ -320,6 +321,7 @@ def main():
                 # Recursive search fallback under project_root
                 norm_cover = cover_path.replace('\\', '/')
                 for r, d, files in os.walk(project_root):
+                    d[:] = [dirname for dirname in d if dirname not in ('venv', '.venv', '.git', '__pycache__', 'node_modules')]
                     for f in files:
                         full_f = os.path.join(r, f).replace('\\', '/')
                         if full_f.endswith(norm_cover):

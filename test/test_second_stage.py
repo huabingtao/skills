@@ -29,10 +29,13 @@ class TestSecondStageOptimizations(unittest.TestCase):
             def mock_exists(p):
                 return "config.json" in p or "wechat_config.json" in p
                 
+            import builtins
+            original_open = builtins.open
+            
             # Patch exists and open
             with patch('engine.publisher.os.path.exists', mock_exists):
                 def mock_open(file, *args, **kwargs):
-                    return open(temp_path, *args, **kwargs)
+                    return original_open(temp_path, *args, **kwargs)
                 
                 with patch('builtins.open', mock_open):
                     # This should read the bad JSON from temp_path, throw warning and return {}
