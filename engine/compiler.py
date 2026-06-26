@@ -250,10 +250,10 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
     # 1.5 Preprocess link-style image references [name](img://path) to ![name](img://path)
     md_content = re.sub(r'(?<!\!)\[([^\]\n]+)\]\((img://[^\)\n]+)\)', r'![\1](\2)', md_content)
 
-    # 2. Dynamic numerical highlights loaded from highlight rules
-    if highlight_rules_path:
-        rules = load_highlight_rules(highlight_rules_path)
-        md_content = apply_highlight_rules(md_content, rules)
+    # 2. Dynamic numerical highlights loaded from highlight rules (Commented out)
+    # if highlight_rules_path:
+    #     rules = load_highlight_rules(highlight_rules_path)
+    #     md_content = apply_highlight_rules(md_content, rules)
 
     # Load image mapping dictionary
     image_mapping = load_image_mapping(image_mapping_path) if image_mapping_path else {}
@@ -810,10 +810,10 @@ def convert_to_optimized_markdown(md_content, project_config, input_dir=None):
     # 3. Link-style image references [name](img://path) to ![name](img://path)
     md_content = re.sub(r'(?<!\!)\[([^\]\n]+)\]\((img://[^\)\n]+)\)', r'![\1](\2)', md_content)
 
-    # 4. Apply highlight rules
-    if highlight_rules_path:
-        rules = load_highlight_rules(highlight_rules_path)
-        md_content = apply_highlight_rules(md_content, rules)
+    # 4. Apply highlight rules (Commented out)
+    # if highlight_rules_path:
+    #     rules = load_highlight_rules(highlight_rules_path)
+    #     md_content = apply_highlight_rules(md_content, rules)
 
     def translate_params_to_pandoc(params_str):
         params = {}

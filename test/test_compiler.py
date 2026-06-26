@@ -21,33 +21,21 @@ class TestWeChatCompiler(unittest.TestCase):
         cls.project_config = load_project_config(cls.pack_dir)
 
     def test_numerical_highlighting(self):
-        """Verify status values like +5% and +3s are highlighted in red strong font tags."""
+        """Verify status values like +5% and +3s are highlighted in red strong font tags when rules are applied directly."""
+        from engine.highlight import apply_highlight_rules, load_highlight_rules
         md = "暴击率+5%\n幽灵状态时间上限+3s"
-        html, _ = convert_to_wechat_html(md, self.project_config)
-        
-        soup = BeautifulSoup(html, 'html.parser')
-        fonts = soup.find_all('font')
-        
-        # Verify both values are wrapped in font tags with color #FF4D4F and strong tags
-        red_fonts = [f for f in fonts if f.get('color') == '#FF4D4F']
-        self.assertEqual(len(red_fonts), 2)
-        self.assertIn("+5%", red_fonts[0].text)
-        self.assertIn("+3s", red_fonts[1].text)
-        
-        for rf in red_fonts:
-            self.assertEqual(rf.parent.name, 'strong')
+        rules = load_highlight_rules(self.project_config.get('highlight_rules_path'))
+        res = apply_highlight_rules(md, rules)
+        self.assertIn('<strong><font color="#FF4D4F">+5%</font></strong>', res)
+        self.assertIn('<strong><font color="#FF4D4F">+3s</font></strong>', res)
 
     def test_highlight_nesting_prevention(self):
-        """Verify that lookahead assertions prevent double-wrapping/nesting of highlights."""
+        """Verify that auto-highlighting is disabled by default in convert_to_wechat_html."""
         md = "暴击率+5%\n幽灵状态时间上限+3s"
         html, _ = convert_to_wechat_html(md, self.project_config)
-        
         soup = BeautifulSoup(html, 'html.parser')
-        # Check there are no nested font tags or strong tags
-        for strong in soup.find_all('strong'):
-            self.assertEqual(len(strong.find_all('strong')), 0, "Found nested strong tags!")
-            for font in strong.find_all('font'):
-                self.assertEqual(len(font.find_all('font')), 0, "Found nested font tags!")
+        # Since auto-highlighting is commented out, there should be no font tags
+        self.assertEqual(len(soup.find_all('font')), 0)
 
     def test_image_center_layout(self):
         """Verify the new type=center image layout with custom width."""
