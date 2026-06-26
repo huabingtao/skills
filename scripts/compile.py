@@ -134,35 +134,35 @@ def main():
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(wechat_html)
 
-        # Save Optimized Markdown
-        optimized_md = convert_to_optimized_markdown(content, project_config, input_dir=input_dir)
-        output_md_path = os.path.splitext(output_path)[0] + ".md"
-        with open(output_md_path, "w", encoding="utf-8") as f:
-            f.write(optimized_md)
+        # Save Optimized Markdown (Commented out)
+        # optimized_md = convert_to_optimized_markdown(content, project_config, input_dir=input_dir)
+        # output_md_path = os.path.splitext(output_path)[0] + ".md"
+        # with open(output_md_path, "w", encoding="utf-8") as f:
+        #     f.write(optimized_md)
 
-        # Save DOCX using pandoc if available
-        output_docx_path = os.path.splitext(output_path)[0] + ".docx"
-        resource_paths = [input_dir]
-        if project_config.get("assets_dir"):
-            pack_dir = os.path.dirname(project_config["assets_dir"])
-            resource_paths.append(pack_dir)
+        # Save DOCX using pandoc if available (Commented out)
+        # output_docx_path = os.path.splitext(output_path)[0] + ".docx"
+        # resource_paths = [input_dir]
+        # if project_config.get("assets_dir"):
+        #     pack_dir = os.path.dirname(project_config["assets_dir"])
+        #     resource_paths.append(pack_dir)
 
-        import subprocess
-        pandoc_cmd = [
-            "pandoc",
-            "-s",
-            "--resource-path=" + ":".join(resource_paths),
-            "-f", "markdown",
-            "-t", "docx",
-            "-o", output_docx_path,
-            output_md_path
-        ]
-        docx_ok = False
-        try:
-            subprocess.run(pandoc_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
-            docx_ok = True
-        except Exception as e:
-            print("⚠ Warning: Failed to generate DOCX using pandoc: " + str(e))
+        # import subprocess
+        # pandoc_cmd = [
+        #     "pandoc",
+        #     "-s",
+        #     "--resource-path=" + ":".join(resource_paths),
+        #     "-f", "markdown",
+        #     "-t", "docx",
+        #     "-o", output_docx_path,
+        #     output_md_path
+        # ]
+        # docx_ok = False
+        # try:
+        #     subprocess.run(pandoc_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        #     docx_ok = True
+        # except Exception as e:
+        #     print("⚠ Warning: Failed to generate DOCX using pandoc: " + str(e))
 
         # Save Metadata
         if metadata:
@@ -177,9 +177,9 @@ def main():
                 json.dump(metadata, f, ensure_ascii=False, indent=2, default=json_serial)
 
         print("✅ Successfully converted '" + str(input_path) + "' → '" + str(output_path) + "'")
-        print("✅ Optimized Markdown saved to '" + str(output_md_path) + "'")
-        if docx_ok:
-            print("✅ Optimized DOCX saved to '" + str(output_docx_path) + "'")
+        # print("✅ Optimized Markdown saved to '" + str(output_md_path) + "'")
+        # if docx_ok:
+        #     print("✅ Optimized DOCX saved to '" + str(output_docx_path) + "'")
         if metadata:
             print("✅ Metadata saved to '" + str(meta_path) + "'")
 
