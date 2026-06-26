@@ -132,5 +132,34 @@ class TestWeChatCompiler(unittest.TestCase):
         span3 = li3.find('span', attrs={'style': 'white-space: nowrap !important;'})
         self.assertIsNone(span3)
 
+    def test_non_capturing_highlighting(self):
+        """Verify that highlight rules with non-capturing patterns (no groups) are correctly highlighted."""
+        custom_rules = {
+            "colors": {
+                "red": "#FF4D4F",
+                "green": "#52C41A"
+            },
+            "red": [
+                # Capturing group pattern
+                {"pattern": r"(\+5%)"}
+            ],
+            "green": [
+                # Non-capturing group pattern
+                {"pattern": r"\+10%"}
+            ]
+        }
+        
+        from engine.highlight import apply_highlight_rules
+        
+        # Test capturing group pattern
+        text1 = "暴击率+5%"
+        res1 = apply_highlight_rules(text1, custom_rules)
+        self.assertIn('<strong><font color="#FF4D4F">+5%</font></strong>', res1)
+        
+        # Test non-capturing pattern (used to crash before optimization)
+        text2 = "生命值+10%"
+        res2 = apply_highlight_rules(text2, custom_rules)
+        self.assertIn('<strong><font color="#52C41A">+10%</font></strong>', res2)
+
 if __name__ == '__main__':
     unittest.main()

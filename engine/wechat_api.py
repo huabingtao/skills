@@ -101,7 +101,17 @@ class WeChatClient:
 
         result = response.json()
         if "media_id" not in result:
-            raise Exception(f"Failed to upload permanent material: {result.get('errmsg')} (Code: {result.get('errcode')})")
+            errcode = result.get("errcode", 0)
+            if errcode in [40001, 42001]:
+                token = self.get_access_token(force_refresh=True)
+                url = f"{self.BASE_URL}/material/add_material?access_token={token}&type={material_type}"
+                with open(image_path, 'rb') as f:
+                    files = {'media': (filename, f)}
+                    response = requests.post(url, files=files)
+                result = response.json()
+
+            if "media_id" not in result:
+                raise Exception(f"Failed to upload permanent material: {result.get('errmsg')} (Code: {result.get('errcode')})")
 
         return result["media_id"]
 
@@ -114,7 +124,6 @@ class WeChatClient:
             raise FileNotFoundError(f"Image not found: {image_path}")
 
         token = self.get_access_token()
-        # WeChat Content CDN API
         url = f"{self.BASE_URL}/media/uploadimg?access_token={token}"
 
         filename = os.path.basename(image_path)
@@ -125,7 +134,17 @@ class WeChatClient:
 
         result = response.json()
         if "url" not in result:
-            raise Exception(f"Failed to upload to WeChat CDN: {result.get('errmsg')} (Code: {result.get('errcode')})")
+            errcode = result.get("errcode", 0)
+            if errcode in [40001, 42001]:
+                token = self.get_access_token(force_refresh=True)
+                url = f"{self.BASE_URL}/media/uploadimg?access_token={token}"
+                with open(image_path, 'rb') as f:
+                    files = {'media': (filename, f)}
+                    response = requests.post(url, files=files)
+                result = response.json()
+
+            if "url" not in result:
+                raise Exception(f"Failed to upload to WeChat CDN: {result.get('errmsg')} (Code: {result.get('errcode')})")
 
         return result["url"]
 
