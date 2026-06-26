@@ -245,7 +245,7 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
     md_content = re.sub(r'\{\{([^}]+)\}\}', _expand_shorthand, md_content)
 
     # 1. Preprocess Ruby Annotations: [文字]{注音} -> <ruby>文字<rt>注音</rt></ruby>
-    md_content = re.sub(r'\[([^\]\n]+)\]\{([^\}\n]+)\}', r'<ruby>\1<rt>\2</rt></ruby>', md_content)
+    md_content = re.sub(r'\[([^\]\n]+)\]\{([a-zA-Z0-9\sāáǎàēéěèīíǐìōóǒòūúǔùüǘǚǜ]+)\}', r'<ruby>\1<rt>\2</rt></ruby>', md_content)
 
     # 1.5 Preprocess link-style image references [name](img://path) to ![name](img://path)
     md_content = re.sub(r'(?<!\!)\[([^\]\n]+)\]\((img://[^\)\n]+)\)', r'![\1](\2)', md_content)
@@ -805,7 +805,7 @@ def convert_to_optimized_markdown(md_content, project_config, input_dir=None):
     md_content = re.sub(r'\{\{([^}]+)\}\}', _expand_shorthand, md_content)
 
     # 2. Ruby Annotations [文字]{注音} -> <ruby>文字<rt>注音</rt></ruby>
-    md_content = re.sub(r'\[([^\]\n]+)\]\{([^\}\n]+)\}', r'<ruby>\1<rt>\2</rt></ruby>', md_content)
+    md_content = re.sub(r'\[([^\]\n]+)\]\{([a-zA-Z0-9\sāáǎàēéěèīíǐìōóǒòūúǔùüǘǚǜ]+)\}', r'<ruby>\1<rt>\2</rt></ruby>', md_content)
 
     # 3. Link-style image references [name](img://path) to ![name](img://path)
     md_content = re.sub(r'(?<!\!)\[([^\]\n]+)\]\((img://[^\)\n]+)\)', r'![\1](\2)', md_content)

@@ -161,5 +161,18 @@ class TestWeChatCompiler(unittest.TestCase):
         res2 = apply_highlight_rules(text2, custom_rules)
         self.assertIn('<strong><font color="#52C41A">+10%</font></strong>', res2)
 
+    def test_ruby_annotations_collision_prevention(self):
+        """Verify that Ruby annotations regex only matches phonetic annotations, and does not collide with attributes."""
+        # 1. Normal Ruby annotation should work
+        md_ruby = "[拼音]{pin1 yin1}"
+        html_ruby, _ = convert_to_wechat_html(md_ruby, self.project_config)
+        self.assertIn("<ruby>拼音<rt>pin1 yin1</rt></ruby>", html_ruby)
+
+        # 2. Image/link attribute style should NOT be matched as Ruby annotation
+        md_attr = "[追光者]{type=card}"
+        html_attr, _ = convert_to_wechat_html(md_attr, self.project_config)
+        # Should stay plain text instead of converting to <ruby>
+        self.assertNotIn("<ruby>", html_attr)
+
 if __name__ == '__main__':
     unittest.main()
