@@ -31,14 +31,19 @@ class WeChatClient:
         self.appid = appid
         self.appsecret = appsecret
         self.access_token = None
+        self.access_token_expires_at = 0.0
         self.TOKEN_CACHE_PATH = os.path.join(cache_dir, ".wechat_token_cache.json")
 
     def get_access_token(self, force_refresh: bool = False) -> str:
         """
-        Retrieves the access_token, using local cache if valid.
+        Retrieves the access_token, using memory cache or local file cache if valid.
         Automatically refreshes if expired.
         """
-        # 1. Try to load from cache
+        # 1. Try to load from memory cache
+        if not force_refresh and self.access_token and time.time() < self.access_token_expires_at - 600:
+            return self.access_token
+
+        # 2. Try to load from file cache
         if not force_refresh and os.path.exists(self.TOKEN_CACHE_PATH):
             try:
                 with open(self.TOKEN_CACHE_PATH, 'r') as f:
@@ -46,11 +51,13 @@ class WeChatClient:
 
                 # Check if token is still valid (refresh 10 minutes early)
                 if time.time() < cache.get('expires_at', 0) - 600:
-                    return cache['access_token']
+                    self.access_token = cache['access_token']
+                    self.access_token_expires_at = cache.get('expires_at', 0.0)
+                    return self.access_token
             except (json.JSONDecodeError, KeyError, Exception):
                 pass
 
-        # 2. Fetch new token from WeChat API
+        # 3. Fetch new token from WeChat API
         url = f"{self.BASE_URL}/token"
         params = {
             "grant_type": "client_credential",
@@ -66,11 +73,16 @@ class WeChatClient:
 
         token = data["access_token"]
         expires_in = data.get("expires_in", 7200)
+        expires_at = time.time() + expires_in
 
-        # 3. Save to cache
+        # 4. Save to memory cache
+        self.access_token = token
+        self.access_token_expires_at = expires_at
+
+        # 5. Save to file cache
         cache_data = {
             "access_token": token,
-            "expires_at": time.time() + expires_in
+            "expires_at": expires_at
         }
         try:
             os.makedirs(os.path.dirname(self.TOKEN_CACHE_PATH) or '.', exist_ok=True)
@@ -81,6 +93,60 @@ class WeChatClient:
 
         return token
 
+    def _post(self, path_suffix: str, files: Optional[Dict[str, Any]] = None, json_data: Optional[Dict[str, Any]] = None, headers: Optional[Dict[str, Any]] = None, force_refresh: bool = False) -> Dict[str, Any]:
+        """
+        Internal helper to issue a POST request to WeChat API with the access token.
+        """
+        token = self.get_access_token(force_refresh=force_refresh)
+        separator = "&" if "?" in path_suffix else "?"
+        url = f"{self.BASE_URL}{path_suffix}{separator}access_token={token}"
+
+        if files:
+            response = requests.post(url, files=files)
+        elif json_data:
+            payload = json.dumps(json_data, ensure_ascii=False).encode('utf-8')
+            req_headers = {'Content-Type': 'application/json; charset=utf-8'}
+            if headers:
+                req_headers.update(headers)
+            response = requests.post(url, data=payload, headers=req_headers)
+        else:
+            response = requests.post(url)
+
+        return response.json()
+
+    def _post_with_retry(self, path_suffix: str, files_builder_func = None, json_data: Optional[Dict[str, Any]] = None, headers: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """
+        Wraps POST requests with retry-on-expired-token logic.
+        Ensures that open files created by files_builder_func are correctly closed.
+        """
+        # 1. First attempt
+        files = files_builder_func() if files_builder_func else None
+        try:
+            result = self._post(path_suffix, files=files, json_data=json_data, headers=headers)
+        finally:
+            if files:
+                for _, file_tuple in files.items():
+                    if isinstance(file_tuple, tuple) and len(file_tuple) >= 2:
+                        file_handle = file_tuple[1]
+                        if hasattr(file_handle, 'close'):
+                            file_handle.close()
+
+        errcode = result.get("errcode", 0)
+        # 2. Check if we need to retry due to invalid/expired token
+        if errcode in [40001, 42001]:
+            # Force refresh token and retry
+            files = files_builder_func() if files_builder_func else None
+            try:
+                result = self._post(path_suffix, files=files, json_data=json_data, headers=headers, force_refresh=True)
+            finally:
+                if files:
+                    for _, file_tuple in files.items():
+                        if isinstance(file_tuple, tuple) and len(file_tuple) >= 2:
+                            file_handle = file_tuple[1]
+                            if hasattr(file_handle, 'close'):
+                                file_handle.close()
+        return result
+
     def upload_image(self, image_path: str, is_thumb: bool = False) -> str:
         """
         Uploads an image as a permanent material to get a MediaID.
@@ -89,29 +155,17 @@ class WeChatClient:
         if not os.path.exists(image_path):
             raise FileNotFoundError(f"Image not found: {image_path}")
 
-        token = self.get_access_token()
-        material_type = "thumb" if is_thumb else "image"
-        url = f"{self.BASE_URL}/material/add_material?access_token={token}&type={material_type}"
-
         filename = os.path.basename(image_path)
+        material_type = "thumb" if is_thumb else "image"
+        path_suffix = f"/material/add_material?type={material_type}"
 
-        with open(image_path, 'rb') as f:
-            files = {'media': (filename, f)}
-            response = requests.post(url, files=files)
+        def files_builder():
+            return {'media': (filename, open(image_path, 'rb'))}
 
-        result = response.json()
+        result = self._post_with_retry(path_suffix, files_builder_func=files_builder)
+
         if "media_id" not in result:
-            errcode = result.get("errcode", 0)
-            if errcode in [40001, 42001]:
-                token = self.get_access_token(force_refresh=True)
-                url = f"{self.BASE_URL}/material/add_material?access_token={token}&type={material_type}"
-                with open(image_path, 'rb') as f:
-                    files = {'media': (filename, f)}
-                    response = requests.post(url, files=files)
-                result = response.json()
-
-            if "media_id" not in result:
-                raise Exception(f"Failed to upload permanent material: {result.get('errmsg')} (Code: {result.get('errcode')})")
+            raise Exception(f"Failed to upload permanent material: {result.get('errmsg')} (Code: {result.get('errcode')})")
 
         return result["media_id"]
 
@@ -123,28 +177,16 @@ class WeChatClient:
         if not os.path.exists(image_path):
             raise FileNotFoundError(f"Image not found: {image_path}")
 
-        token = self.get_access_token()
-        url = f"{self.BASE_URL}/media/uploadimg?access_token={token}"
-
         filename = os.path.basename(image_path)
+        path_suffix = "/media/uploadimg"
 
-        with open(image_path, 'rb') as f:
-            files = {'media': (filename, f)}
-            response = requests.post(url, files=files)
+        def files_builder():
+            return {'media': (filename, open(image_path, 'rb'))}
 
-        result = response.json()
+        result = self._post_with_retry(path_suffix, files_builder_func=files_builder)
+
         if "url" not in result:
-            errcode = result.get("errcode", 0)
-            if errcode in [40001, 42001]:
-                token = self.get_access_token(force_refresh=True)
-                url = f"{self.BASE_URL}/media/uploadimg?access_token={token}"
-                with open(image_path, 'rb') as f:
-                    files = {'media': (filename, f)}
-                    response = requests.post(url, files=files)
-                result = response.json()
-
-            if "url" not in result:
-                raise Exception(f"Failed to upload to WeChat CDN: {result.get('errmsg')} (Code: {result.get('errcode')})")
+            raise Exception(f"Failed to upload to WeChat CDN: {result.get('errmsg')} (Code: {result.get('errcode')})")
 
         return result["url"]
 
@@ -173,10 +215,6 @@ class WeChatClient:
         Returns:
             The media_id of the created draft.
         """
-        token = self.get_access_token()
-        url = f"{self.BASE_URL}/draft/add?access_token={token}"
-
-        # Article structure
         article_data = {
             "articles": [
                 {
@@ -191,25 +229,10 @@ class WeChatClient:
                 }
             ]
         }
+        result = self._post_with_retry("/draft/add", json_data=article_data)
 
-        # Send request
-        # ensure_ascii=False is critical for Chinese characters
-        payload = json.dumps(article_data, ensure_ascii=False).encode('utf-8')
-        headers = {'Content-Type': 'application/json; charset=utf-8'}
-
-        response = requests.post(url, data=payload, headers=headers)
-        result = response.json()
-
-        if result.get("errcode", 0) != 0:
-            # Handle token expiration and retry once
-            if result.get("errcode") in [40001, 42001]:
-                token = self.get_access_token(force_refresh=True)
-                url = f"{self.BASE_URL}/draft/add?access_token={token}"
-                response = requests.post(url, data=payload, headers=headers)
-                result = response.json()
-
-            if result.get("errcode", 0) != 0:
-                raise Exception(f"Failed to create draft: {result.get('errmsg')} (Code: {result.get('errcode')})")
+        if "media_id" not in result:
+            raise Exception(f"Failed to create draft: {result.get('errmsg')} (Code: {result.get('errcode')})")
 
         return result["media_id"]
 
@@ -239,10 +262,6 @@ class WeChatClient:
             need_open_comment: 1 to open comment, 0 to close.
             only_fans_can_comment: 1 if only fans can comment, 0 if anyone.
         """
-        token = self.get_access_token()
-        url = f"{self.BASE_URL}/draft/update?access_token={token}"
-
-        # Update structure
         update_data = {
             "media_id": media_id,
             "index": index,
@@ -257,21 +276,7 @@ class WeChatClient:
                 "only_fans_can_comment": only_fans_can_comment
             }
         }
-
-        # Send request
-        payload = json.dumps(update_data, ensure_ascii=False).encode('utf-8')
-        headers = {'Content-Type': 'application/json; charset=utf-8'}
-
-        response = requests.post(url, data=payload, headers=headers)
-        result = response.json()
+        result = self._post_with_retry("/draft/update", json_data=update_data)
 
         if result.get("errcode", 0) != 0:
-            # Handle token expiration and retry once
-            if result.get("errcode") in [40001, 42001]:
-                token = self.get_access_token(force_refresh=True)
-                url = f"{self.BASE_URL}/draft/update?access_token={token}"
-                response = requests.post(url, data=payload, headers=headers)
-                result = response.json()
-
-            if result.get("errcode", 0) != 0:
-                raise Exception(f"Failed to update draft: {result.get('errmsg')} (Code: {result.get('errcode')})")
+            raise Exception(f"Failed to update draft: {result.get('errmsg')} (Code: {result.get('errcode')})")
