@@ -51,6 +51,15 @@ def is_in_header(chunk, start):
     return chunk[line_start:start].lstrip().startswith('#')
 
 
+def ensure_output_directory(output_path):
+    """Ensure the parent directory for output_path exists."""
+    if not output_path:
+        return
+    output_dir = os.path.dirname(os.path.abspath(output_path))
+    if output_dir and not os.path.exists(output_dir):
+        os.makedirs(output_dir, exist_ok=True)
+
+
 def run_stage_1(input_path, output_path, highlight_rules_path, image_mapping_path):
     print("\n🚀 [Stage 1/4] 正在进行文本整理与数值高亮...")
     if not os.path.exists(input_path):
@@ -78,6 +87,8 @@ def run_stage_1(input_path, output_path, highlight_rules_path, image_mapping_pat
 
     # 2. 关键词加粗 (已根据用户需求移除自动包裹逻辑)
 
+    # Ensure the output parent directory exists
+    ensure_output_directory(output_path)
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(front_matter + body)
     return True
@@ -115,6 +126,8 @@ def run_stage_2(input_path, output_path, image_mapping_path):
     else:
         print("⚠ 找不到图片映射字典，跳过配图注入")
 
+    # Ensure the output parent directory exists
+    ensure_output_directory(output_path)
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(front_matter + body)
     return True
@@ -134,6 +147,8 @@ def run_stage_3(input_path, output_path, project_config):
     local_config["highlight_rules_path"] = None
     wechat_html, metadata = convert_to_wechat_html(content, local_config, input_dir=input_dir)
 
+    # Ensure the output parent directory exists
+    ensure_output_directory(output_path)
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(wechat_html)
 
@@ -144,7 +159,8 @@ def run_stage_3(input_path, output_path, project_config):
             if isinstance(obj, (datetime.date, datetime.datetime)):
                 return obj.isoformat()
             raise TypeError("Type %s not serializable" % type(obj))
-            
+        # Ensure metadata parent directory exists as well
+        ensure_output_directory(meta_path)
         with open(meta_path, "w", encoding="utf-8") as f:
             json.dump(metadata, f, ensure_ascii=False, indent=2, default=json_serial)
 
