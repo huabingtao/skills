@@ -8,7 +8,7 @@
 
 ### 1. 自动化排版美化 (Text Beautification)
 根据内容包定义的规则，自动执行：
-- **数值高亮 (HTML Color)**：由内容包 `highlight_rules.json` 正则动态配置。例如在弹壳攻略中：
+- **数值高亮 (HTML Color)**：在交互式流程的 Stage 1 中由内容包 `highlight_rules.json` 正则动态配置；Stage 3 的 HTML 编译默认不重复高亮，避免产生嵌套 `<strong>/<font>`。例如在弹壳攻略中：
   - <font color="#FF4D4F">**攻击/伤害/暴击类**</font>数值自动标红。
   - <font color="#1890FF">**生命/防御/减伤类**</font>数值自动标蓝。
   - <font color="#52C41A">**冷却/范围/异常类**</font>数值自动标绿。
@@ -105,7 +105,13 @@ AI Agent 接收到您的指令后，将通过该 Skill 在后台全自动代您�
 ### 3. 环境与依赖（仅供首次配置）
 如果你是在全新的终端或系统上部署该项目，Agent 需要确保底层已安装必要的 Python 依赖：
 ```bash
-pip install -r requirements.txt
+python3 -m pip install -r requirements.txt
+```
+
+### 4. 开发与测试
+当前项目不依赖打包框架，推荐统一使用 `python3`：
+```bash
+python3 -m unittest discover -s test -p 'test_*.py'
 ```
 
 ---

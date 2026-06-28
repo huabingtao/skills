@@ -203,5 +203,56 @@ class TestSecondStageOptimizations(unittest.TestCase):
             sys.argv = sys_argv_backup
             shutil.rmtree(temp_dir)
 
+    @patch('engine.publisher.process_content_images', lambda client, html, *args, **kwargs: html)
+    def test_publish_draft_direct_call_and_invalid_media_fallback(self):
+        """Verify publish_draft can be called without sys.argv and recreates deleted drafts."""
+        import tempfile
+        import shutil
+        import json
+
+        temp_dir = tempfile.mkdtemp()
+        html_file = os.path.join(temp_dir, "article.html")
+        cover_path = os.path.join(temp_dir, "cover.png")
+        draft_cache_path = os.path.join(temp_dir, ".wechat_draft_cache.json")
+
+        with open(html_file, 'w', encoding='utf-8') as f:
+            f.write("<div>Body</div>")
+        with open(os.path.join(temp_dir, "article.json"), 'w', encoding='utf-8') as f:
+            json.dump({"title": "标题", "image": "cover.png"}, f, ensure_ascii=False)
+        with open(cover_path, 'w') as f:
+            f.write("cover")
+
+        html_abs = os.path.abspath(html_file)
+        with open(draft_cache_path, 'w', encoding='utf-8') as f:
+            json.dump({
+                html_abs: {
+                    "media_id": "deleted_media_id",
+                    "html_hash": "old",
+                    "cover_hash": "old"
+                }
+            }, f)
+
+        mock_client = MagicMock()
+        mock_client.upload_image.return_value = "thumb_id"
+        mock_client.update_draft.side_effect = Exception("invalid media_id 40007")
+        mock_client.create_draft.return_value = "new_media_id"
+        mock_client_cls = MagicMock(return_value=mock_client)
+
+        try:
+            result = wechat_publisher.publish_draft(
+                content_path=html_file,
+                appid="appid",
+                appsecret="secret",
+                cache_dir=temp_dir,
+                client_cls=mock_client_cls,
+            )
+
+            self.assertEqual(result.media_id, "new_media_id")
+            self.assertEqual(result.action, "create")
+            mock_client.update_draft.assert_called_once()
+            mock_client.create_draft.assert_called_once()
+        finally:
+            shutil.rmtree(temp_dir)
+
 if __name__ == '__main__':
     unittest.main()

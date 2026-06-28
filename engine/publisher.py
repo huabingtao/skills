@@ -18,8 +18,16 @@ import requests
 import tempfile
 import hashlib
 import urllib.parse
+from dataclasses import dataclass
 
 from .wechat_api import WeChatClient
+
+
+@dataclass
+class PublishResult:
+    media_id: str = None
+    action: str = None
+    skipped: bool = False
 
 
 def get_file_md5(file_path):
@@ -231,6 +239,205 @@ def setup_interactive_config():
     return appid, appsecret
 
 
+def load_content_metadata(content_path):
+    """Loads sidecar metadata JSON for a compiled HTML file."""
+    metadata = {}
+    meta_path = os.path.splitext(content_path)[0] + ".json"
+    if os.path.exists(meta_path):
+        try:
+            with open(meta_path, 'r', encoding='utf-8') as f:
+                metadata = json.load(f)
+            print(f"✅ Loaded metadata from {meta_path}")
+        except Exception as e:
+            print(f"⚠ Warning: Failed to load metadata file: {e}")
+    return metadata
+
+
+def resolve_cover_path(cover_path, content_path):
+    """Resolves a cover path relative to the content file or project root."""
+    if not cover_path:
+        return cover_path
+
+    cover_path = urllib.parse.unquote(cover_path)
+    if os.path.isabs(cover_path) or os.path.exists(cover_path):
+        return cover_path
+
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    potential_paths = [
+        os.path.join(os.path.dirname(content_path), cover_path.lstrip('/')),
+        os.path.join(project_root, cover_path.lstrip('/')),
+    ]
+    for path in potential_paths:
+        if os.path.exists(path):
+            return path
+
+    norm_cover = cover_path.replace('\\', '/')
+    for root, dirs, files in os.walk(project_root):
+        dirs[:] = [dirname for dirname in dirs if dirname not in ('venv', '.venv', '.git', '__pycache__', 'node_modules')]
+        for filename in files:
+            full_file = os.path.join(root, filename).replace('\\', '/')
+            if full_file.endswith(norm_cover):
+                return os.path.join(root, filename)
+    return cover_path
+
+
+def publish_draft(
+    content_path,
+    title=None,
+    cover_path=None,
+    author=None,
+    appid=None,
+    appsecret=None,
+    cache_dir=".",
+    force_new=False,
+    client_cls=None,
+):
+    """
+    Publishes or updates a WeChat draft from compiled HTML.
+
+    This is the testable core used by both the CLI and interactive workflow.
+    """
+    if not content_path:
+        raise ValueError("Path to the HTML content file is required. Provide via -c/--content.")
+    if not os.path.exists(content_path):
+        raise FileNotFoundError(f"Content file not found: {content_path}")
+    if not appid or not appsecret:
+        raise ValueError("WeChat credentials are required to proceed.")
+
+    cache_file = os.path.abspath(os.path.join(cache_dir, '.wechat_image_cache.json'))
+    draft_cache_file = os.path.abspath(os.path.join(cache_dir, '.wechat_draft_cache.json'))
+
+    metadata = load_content_metadata(content_path)
+    title = title or metadata.get('title')
+    author = author or metadata.get('author') or "弹壳呱呱"
+    cover_path = resolve_cover_path(cover_path or metadata.get('image'), os.path.abspath(content_path))
+
+    if not title:
+        raise ValueError("Article title is required. Provide via --title or Frontmatter.")
+    if not cover_path:
+        raise ValueError("Cover image is required. Provide via --cover or Frontmatter.")
+    if not os.path.exists(cover_path):
+        raise FileNotFoundError(f"Cover image not found: {cover_path}")
+
+    html_abs_path = os.path.abspath(content_path)
+    draft_cache = load_draft_cache(draft_cache_file)
+    cached_entry = draft_cache.get(html_abs_path)
+
+    existing_media_id = None
+    cached_html_hash = None
+    cached_cover_hash = None
+    if not force_new and cached_entry:
+        if isinstance(cached_entry, dict):
+            existing_media_id = cached_entry.get("media_id")
+            cached_html_hash = cached_entry.get("html_hash")
+            cached_cover_hash = cached_entry.get("cover_hash")
+        else:
+            existing_media_id = cached_entry
+
+    print("\n" + "="*50)
+    print("🚀 PRE-FLIGHT CHECK")
+    print("="*50)
+    print(f"Title:  {title}")
+    print(f"Author: {author}")
+    print(f"Cover:  {cover_path}")
+    print(f"HTML:   {content_path}")
+    if existing_media_id:
+        print(f"Action: Update existing draft (MediaID: {existing_media_id})")
+    else:
+        print("Action: Create new draft")
+    print("="*50)
+
+    client_cls = client_cls or WeChatClient
+    client = client_cls(appid, appsecret, cache_dir=cache_dir)
+    cache = load_cache(cache_file)
+
+    cover_md5 = get_file_md5(cover_path)
+    if cover_md5 and cover_md5 in cache["thumb_materials"]:
+        thumb_media_id = cache["thumb_materials"][cover_md5]
+        print(f"⚡ Cover cache hit. MediaID: {thumb_media_id}")
+    else:
+        print(f"→ Uploading cover: {os.path.basename(cover_path)}...")
+        thumb_media_id = client.upload_image(cover_path, is_thumb=True)
+        print(f"✅ Cover uploaded. MediaID: {thumb_media_id}")
+        if cover_md5:
+            cache["thumb_materials"][cover_md5] = thumb_media_id
+            save_cache(cache, cache_file)
+
+    with open(content_path, 'r', encoding='utf-8') as f:
+        html_content = f.read()
+
+    print("→ Processing content images...")
+    html_content = process_content_images(client, html_content, os.path.dirname(os.path.abspath(content_path)), cache, cache_file)
+
+    current_html_hash = hashlib.md5(html_content.encode('utf-8')).hexdigest()
+    current_cover_hash = cover_md5
+
+    if not force_new and existing_media_id and cached_html_hash == current_html_hash and cached_cover_hash == current_cover_hash:
+        print("\n⚡ Draft is already up-to-date on WeChat!")
+        print(f"Skipping draft update for '{title}' (MediaID: {existing_media_id}) to preserve manual settings (comments, originality, albums, etc.).")
+        print("="*40)
+        return PublishResult(media_id=existing_media_id, action="skip", skipped=True)
+
+    digest = metadata.get('summary') or metadata.get('digest') or ""
+    need_open_comment = metadata.get('need_open_comment', 1)
+    only_fans_can_comment = metadata.get('only_fans_can_comment', 0)
+
+    def save_current_draft(draft_media_id):
+        draft_cache[html_abs_path] = {
+            "media_id": draft_media_id,
+            "html_hash": current_html_hash,
+            "cover_hash": current_cover_hash
+        }
+        save_draft_cache(draft_cache, draft_cache_file)
+
+    if existing_media_id:
+        try:
+            print(f"→ Updating draft '{title}' with MediaID: {existing_media_id}...")
+            client.update_draft(
+                media_id=existing_media_id,
+                title=title,
+                html_content=html_content,
+                thumb_media_id=thumb_media_id,
+                author=author,
+                digest=digest,
+                need_open_comment=need_open_comment,
+                only_fans_can_comment=only_fans_can_comment
+            )
+            save_current_draft(existing_media_id)
+            print("\n" + "="*40)
+            print("🚀 DRAFT UPDATE SUCCESSFUL!")
+            print(f"Draft MediaID: {existing_media_id}")
+            print("="*40)
+            print("您现在可以前往微信公众号后台“草稿箱”查看。")
+            return PublishResult(media_id=existing_media_id, action="update")
+        except Exception as e:
+            if "invalid media_id" not in str(e).lower() and "40007" not in str(e):
+                raise
+            print(f"\n⚠ Warning: Existing draft MediaID {existing_media_id} not found (may have been deleted).")
+            print(f"→ Falling back to create a new draft instead: '{title}'...")
+
+    else:
+        print(f"→ Creating draft: '{title}'...")
+
+    draft_media_id = client.create_draft(
+        title=title,
+        html_content=html_content,
+        thumb_media_id=thumb_media_id,
+        author=author,
+        digest=digest,
+        need_open_comment=need_open_comment,
+        only_fans_can_comment=only_fans_can_comment
+    )
+    save_current_draft(draft_media_id)
+
+    print("\n" + "="*40)
+    print("🚀 DRAFT CREATION SUCCESSFUL!")
+    print(f"Draft MediaID: {draft_media_id}")
+    print("="*40)
+    print("您现在可以前往微信公众号后台“草稿箱”查看。")
+    return PublishResult(media_id=draft_media_id, action="create")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Universal WeChat Official Account Draft Publisher")
     parser.add_argument("-t", "--title", help="Article title (auto-detected if missing)")
@@ -245,11 +452,6 @@ def main():
 
     args = parser.parse_args()
 
-    # Define cache files
-    cache_file = os.path.abspath(os.path.join(args.cache_dir, '.wechat_image_cache.json'))
-    draft_cache_file = os.path.abspath(os.path.join(args.cache_dir, '.wechat_draft_cache.json'))
-
-    # Resolve credentials
     config = load_config()
     appid = args.appid or os.environ.get('WECHAT_APPID') or config.get('appid')
     appsecret = args.secret or os.environ.get('WECHAT_APPSECRET') or config.get('appsecret')
@@ -284,221 +486,27 @@ def main():
         parser.print_help()
         sys.exit(1)
 
-    if not os.path.exists(args.content):
-        print(f"❌ Error: Content file not found: {args.content}")
-        sys.exit(1)
-
-    # Try to load metadata
-    metadata = {}
-    meta_path = os.path.splitext(args.content)[0] + ".json"
-    if os.path.exists(meta_path):
-        try:
-            with open(meta_path, 'r', encoding='utf-8') as f:
-                metadata = json.load(f)
-            print(f"✅ Loaded metadata from {meta_path}")
-        except Exception as e:
-            print(f"⚠ Warning: Failed to load metadata file: {e}")
-
-    # Resolve article details
-    title = args.title or metadata.get('title')
-    author = args.author or metadata.get('author') or "弹壳呱呱"
-    cover_path = args.cover or metadata.get('image')
-
-    if cover_path:
-        cover_path = urllib.parse.unquote(cover_path)
-        if not os.path.isabs(cover_path) and not os.path.exists(cover_path):
-            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            potential_paths = [
-                os.path.join(os.path.dirname(args.content), cover_path.lstrip('/')),
-                os.path.join(project_root, cover_path.lstrip('/')),
-            ]
-            for path in potential_paths:
-                if os.path.exists(path):
-                    cover_path = path
-                    break
-
-            if not os.path.exists(cover_path):
-                # Recursive search fallback under project_root
-                norm_cover = cover_path.replace('\\', '/')
-                for r, d, files in os.walk(project_root):
-                    d[:] = [dirname for dirname in d if dirname not in ('venv', '.venv', '.git', '__pycache__', 'node_modules')]
-                    for f in files:
-                        full_f = os.path.join(r, f).replace('\\', '/')
-                        if full_f.endswith(norm_cover):
-                            cover_path = os.path.join(r, f)
-                            break
-                    if os.path.exists(cover_path):
-                        break
-
-
-    if not title:
-        print("❌ Error: Article title is required. Provide via --title or Frontmatter.")
-        sys.exit(1)
-        
-    if not cover_path:
-        print("❌ Error: Cover image is required. Provide via --cover or Frontmatter.")
-        sys.exit(1)
-
-    if not os.path.exists(cover_path):
-        print(f"❌ Error: Cover image not found: {cover_path}")
-        sys.exit(1)
-
     if not appid or not appsecret:
         appid, appsecret = setup_interactive_config()
         if not appid or not appsecret:
             print("❌ Error: WeChat credentials are required to proceed.")
             sys.exit(1)
 
-    html_abs_path = os.path.abspath(args.content)
-    draft_cache = load_draft_cache(draft_cache_file)
-    cached_entry = draft_cache.get(html_abs_path)
-    
-    existing_media_id = None
-    cached_html_hash = None
-    cached_cover_hash = None
-    
-    if not args.new and cached_entry:
-        if isinstance(cached_entry, dict):
-            existing_media_id = cached_entry.get("media_id")
-            cached_html_hash = cached_entry.get("html_hash")
-            cached_cover_hash = cached_entry.get("cover_hash")
-        else:
-            existing_media_id = cached_entry
-
-    # Confirmation
-    print("\n" + "="*50)
-    print("🚀 PRE-FLIGHT CHECK")
-    print("="*50)
-    print(f"Title:  {title}")
-    print(f"Author: {author}")
-    print(f"Cover:  {cover_path}")
-    print(f"HTML:   {args.content}")
-    if existing_media_id:
-        print(f"Action: Update existing draft (MediaID: {existing_media_id})")
-    else:
-        print(f"Action: Create new draft")
-    print("="*50)
-
-    client = WeChatClient(appid, appsecret, cache_dir=args.cache_dir)
-    cache = load_cache(cache_file)
-
     try:
-        # 1. Upload Cover
-        cover_md5 = get_file_md5(cover_path)
-        if cover_md5 and cover_md5 in cache["thumb_materials"]:
-            thumb_media_id = cache["thumb_materials"][cover_md5]
-            print(f"⚡ Cover cache hit. MediaID: {thumb_media_id}")
-        else:
-            print(f"→ Uploading cover: {os.path.basename(cover_path)}...")
-            thumb_media_id = client.upload_image(cover_path, is_thumb=True)
-            print(f"✅ Cover uploaded. MediaID: {thumb_media_id}")
-            if cover_md5:
-                cache["thumb_materials"][cover_md5] = thumb_media_id
-                save_cache(cache, cache_file)
-
-        # 2. Read Content
-        with open(args.content, 'r', encoding='utf-8') as f:
-            html_content = f.read()
-            
-        # 3. Process Content Images
-        print("→ Processing content images...")
-        html_content = process_content_images(client, html_content, os.path.dirname(os.path.abspath(args.content)), cache, cache_file)
-
-        # Compute hashes for change detection
-        current_html_hash = hashlib.md5(html_content.encode('utf-8')).hexdigest()
-        current_cover_hash = cover_md5
-
-        # Check if draft is already up-to-date to preserve manual settings on WeChat Admin Platform
-        if not args.new and existing_media_id and cached_html_hash == current_html_hash and cached_cover_hash == current_cover_hash:
-            print("\n⚡ Draft is already up-to-date on WeChat!")
-            print(f"Skipping draft update for '{title}' (MediaID: {existing_media_id}) to preserve manual settings (comments, originality, albums, etc.).")
-            print("="*40)
-            return
-
-        # 4. Create/Update Draft
-        digest = metadata.get('summary') or metadata.get('digest') or ""
-        need_open_comment = metadata.get('need_open_comment', 1)  # Default to 1 (Open comment)
-        only_fans_can_comment = metadata.get('only_fans_can_comment', 0)
-
-        if existing_media_id:
-            try:
-                print(f"→ Updating draft '{title}' with MediaID: {existing_media_id}...")
-                client.update_draft(
-                    media_id=existing_media_id,
-                    title=title,
-                    html_content=html_content,
-                    thumb_media_id=thumb_media_id,
-                    author=author,
-                    digest=digest,
-                    need_open_comment=need_open_comment,
-                    only_fans_can_comment=only_fans_can_comment
-                )
-                draft_media_id = existing_media_id
-                
-                # Update cache
-                draft_cache[html_abs_path] = {
-                    "media_id": draft_media_id,
-                    "html_hash": current_html_hash,
-                    "cover_hash": current_cover_hash
-                }
-                save_draft_cache(draft_cache, draft_cache_file)
-                
-                print("\n" + "="*40)
-                print("🚀 DRAFT UPDATE SUCCESSFUL!")
-                print(f"Draft MediaID: {draft_media_id}")
-                print("="*40)
-            except Exception as e:
-                if "invalid media_id" in str(e).lower() or "40007" in str(e):
-                    print(f"\n⚠ Warning: Existing draft MediaID {existing_media_id} not found (may have been deleted).")
-                    print(f"→ Falling back to create a new draft instead: '{title}'...")
-                    draft_media_id = client.create_draft(
-                        title=title,
-                        html_content=html_content,
-                        thumb_media_id=thumb_media_id,
-                        author=author,
-                        digest=digest,
-                        need_open_comment=need_open_comment,
-                        only_fans_can_comment=only_fans_can_comment
-                    )
-                    draft_cache[html_abs_path] = {
-                        "media_id": draft_media_id,
-                        "html_hash": current_html_hash,
-                        "cover_hash": current_cover_hash
-                    }
-                    save_draft_cache(draft_cache, draft_cache_file)
-                    print("\n" + "="*40)
-                    print("🚀 DRAFT CREATION SUCCESSFUL!")
-                    print(f"Draft MediaID: {draft_media_id}")
-                    print("="*40)
-                else:
-                    raise e
-        else:
-            print(f"→ Creating draft: '{title}'...")
-            draft_media_id = client.create_draft(
-                title=title,
-                html_content=html_content,
-                thumb_media_id=thumb_media_id,
-                author=author,
-                digest=digest,
-                need_open_comment=need_open_comment,
-                only_fans_can_comment=only_fans_can_comment
-            )
-            draft_cache[html_abs_path] = {
-                "media_id": draft_media_id,
-                "html_hash": current_html_hash,
-                "cover_hash": current_cover_hash
-            }
-            save_draft_cache(draft_cache, draft_cache_file)
-            
-            print("\n" + "="*40)
-            print("🚀 DRAFT CREATION SUCCESSFUL!")
-            print(f"Draft MediaID: {draft_media_id}")
-            print("="*40)
-            
-        print("您现在可以前往微信公众号后台“草稿箱”查看。")
-
+        publish_draft(
+            content_path=args.content,
+            title=args.title,
+            cover_path=args.cover,
+            author=args.author,
+            appid=appid,
+            appsecret=appsecret,
+            cache_dir=args.cache_dir,
+            force_new=args.new,
+        )
     except Exception as e:
         print(f"❌ Error: {e}")
+        if not args.content:
+            parser.print_help()
         sys.exit(1)
 
 

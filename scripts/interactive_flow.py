@@ -16,7 +16,7 @@ sys.path.insert(0, PROJECT_ROOT)
 from engine.compiler import convert_to_wechat_html
 from engine.utils import load_image_mapping
 from engine.highlight import load_highlight_rules, apply_highlight_rules
-from engine.publisher import main as publisher_main
+from engine.publisher import load_config, publish_draft, setup_interactive_config
 from scripts.compile import load_project_config, build_default_config
 
 
@@ -274,9 +274,17 @@ def main():
         except Exception as e:
             print(f"Warning resolving cover path: {e}")
 
-    # Run publisher by redirecting argv
-    sys.argv = ['publish.py', '-c', stage3_path] + cover_arg
-    publisher_main()
+    config = load_config()
+    appid = os.environ.get('WECHAT_APPID') or config.get('appid')
+    appsecret = os.environ.get('WECHAT_APPSECRET') or config.get('appsecret')
+    if not appid or not appsecret:
+        appid, appsecret = setup_interactive_config()
+    publish_draft(
+        content_path=stage3_path,
+        cover_path=cover_arg[1] if cover_arg else None,
+        appid=appid,
+        appsecret=appsecret,
+    )
     print("\n🎉 微信公众号发布流程结束！")
 
 

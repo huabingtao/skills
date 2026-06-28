@@ -8,7 +8,6 @@ and metadata extraction.
 import os
 import re
 import yaml
-import json
 import markdown
 from bs4 import BeautifulSoup
 
@@ -127,6 +126,468 @@ def apply_image_node_styles(img, params):
             img['style'] = inline_style
 
 
+def extract_frontmatter(md_content):
+    """
+    Splits optional YAML frontmatter from a Markdown document.
+    """
+    metadata = {}
+    if md_content.startswith('---'):
+        parts = re.split(r'^---', md_content, maxsplit=2, flags=re.MULTILINE)
+        if len(parts) >= 3:
+            try:
+                metadata = yaml.safe_load(parts[1]) or {}
+                md_content = parts[2]
+            except Exception as e:
+                print("⚠ Warning: Failed to parse frontmatter: " + str(e))
+    return md_content, metadata
+
+
+def preprocess_markdown(md_content, project_config=None, enable_highlight=None):
+    """
+    Applies Markdown-level normalization before HTML rendering.
+
+    Numerical highlighting is intentionally opt-in. The interactive workflow
+    performs highlighting in Stage 1 and Stage 3 compiles without applying it
+    again, which prevents nested <strong>/<font> markup.
+    """
+    project_config = project_config or {}
+    if enable_highlight is None:
+        enable_highlight = bool(project_config.get("enable_highlight", False))
+
+    md_content = re.sub(r'^[ \t]*[*+-]\s*$\n?', '', md_content, flags=re.MULTILINE)
+    md_content = re.sub(r'^[ \t]*\d+\.\s*$\n?', '', md_content, flags=re.MULTILINE)
+    md_content = re.sub(r'(^[ \t]*[*+-]\s+[^\n]+)\n[ \t]*[:：]\s*', r'\1：', md_content, flags=re.MULTILINE)
+    md_content = re.sub(r'(^[ \t]*\d+\.\s+[^\n]+)\n[ \t]*[:：]\s*', r'\1：', md_content, flags=re.MULTILINE)
+    md_content = re.sub(r'^[ \t]*>\s*\[!(IMPORTANT|TIP|NOTE|WARNING|CAUTION)\][ \t]*\n?', '', md_content, flags=re.IGNORECASE | re.MULTILINE)
+
+    md_content = re.sub(
+        r'(^[ \t]*[*+-]\s+[^\n]*)(?:\n[ \t]*)*(?=\n[ \t]*\d+\.\s+)',
+        r'\1\n\n<!-- -->',
+        md_content,
+        flags=re.MULTILINE
+    )
+    md_content = re.sub(
+        r'(^[ \t]*\d+\.\s+[^\n]*)(?:\n[ \t]*)*(?=\n[ \t]*[*+-]\s+)',
+        r'\1\n\n<!-- -->',
+        md_content,
+        flags=re.MULTILINE
+    )
+    md_content = re.sub(
+        r'(^[ \t]*\d+\.\s+[^\n]*)(?:\n[ \t]*)*(?=\n[ \t]*1\.\s+)',
+        r'\1\n\n<!-- -->',
+        md_content,
+        flags=re.MULTILINE
+    )
+
+    def _expand_shorthand(m):
+        content = m.group(1)
+        if '|' in content:
+            name, params = content.split('|', 1)
+            name, params = name.strip(), params.strip()
+        else:
+            name, params = content.strip(), 'type=icon'
+        return '![' + name + '](img://' + name + '){' + params + '}'
+
+    md_content = re.sub(r'\{\{([^}]+)\}\}', _expand_shorthand, md_content)
+    md_content = re.sub(r'\[([^\]\n]+)\]\{([a-zA-Z0-9\sāáǎàēéěèīíǐìōóǒòūúǔùüǘǚǜ]+)\}', r'<ruby>\1<rt>\2</rt></ruby>', md_content)
+    md_content = re.sub(r'(?<!\!)\[([^\]\n]+)\]\((img://[^\)\n]+)\)', r'![\1](\2)', md_content)
+
+    highlight_rules_path = project_config.get("highlight_rules_path")
+    if enable_highlight and highlight_rules_path:
+        rules = load_highlight_rules(highlight_rules_path)
+        md_content = apply_highlight_rules(md_content, rules)
+
+    return md_content
+
+
+class ImageResolver:
+    """
+    Resolves img://, mapped, relative, and fallback image references.
+    """
+
+    def __init__(self, project_config, input_dir=None, verbose=False):
+        self.project_config = project_config or {}
+        self.input_dir = input_dir
+        self.verbose = verbose
+        self.assets_dir = self.project_config.get("assets_dir")
+        self.image_mapping_path = self.project_config.get("image_mapping_path")
+        self.placeholder_dir = self.project_config.get("placeholder_dir") or (
+            self.assets_dir and os.path.join(self.assets_dir, "img")
+        )
+
+        if self.placeholder_dir:
+            ensure_placeholder_exists(self.placeholder_dir)
+
+        self.assets_cache = scan_assets(self.assets_dir) if self.assets_dir else {}
+        self.image_mapping = load_image_mapping(self.image_mapping_path) if self.image_mapping_path else {}
+
+    def check_file_exists(self, path):
+        if not path:
+            return False
+        if os.path.isabs(path) and os.path.exists(path):
+            return True
+        if self.assets_dir and os.path.exists(os.path.join(self.assets_dir, "..", path)):
+            return True
+        if self.input_dir and os.path.exists(os.path.join(self.input_dir, path)):
+            return True
+        return False
+
+    def relative_to_project(self, path):
+        project_root = os.path.dirname(self.assets_dir) if self.assets_dir else ""
+        if not project_root:
+            return path
+        if os.path.isabs(path):
+            try:
+                rel = os.path.relpath(path, project_root).replace('\\', '/')
+                if not rel.startswith('..'):
+                    return rel
+            except ValueError:
+                pass
+            return path
+        if self.input_dir and os.path.exists(os.path.join(self.input_dir, path)):
+            abs_path = os.path.abspath(os.path.join(self.input_dir, path))
+            try:
+                rel = os.path.relpath(abs_path, project_root).replace('\\', '/')
+                if not rel.startswith('..'):
+                    return rel
+            except ValueError:
+                pass
+            return abs_path
+        return path
+
+    def normalize_cover_src(self, src):
+        return src.replace('img://', '').replace('[占位图:', '').replace('[占位图', '').replace(']', '').strip().lstrip(':').strip()
+
+    def resolve_image_src(self, src, allow_placeholder=True):
+        src = (src or '').strip()
+        if not src or src.startswith(('http://', 'https://')):
+            return src
+
+        src_clean = src.replace('img://', '')
+        base_name = os.path.basename(src_clean)
+        key_name = os.path.splitext(base_name)[0]
+
+        mapped_path = self.image_mapping.get(src_clean) or self.image_mapping.get(base_name) or self.image_mapping.get(key_name)
+        if mapped_path and self.check_file_exists(mapped_path):
+            return self.relative_to_project(mapped_path)
+
+        if self.check_file_exists(src_clean):
+            return self.relative_to_project(src_clean)
+
+        fallback_match = self.assets_cache.get(key_name.lower()) or self.assets_cache.get(base_name.lower())
+        if fallback_match:
+            if self.verbose:
+                print("ℹ Auto-resolved missing image '" + str(src) + "' via folder scanning to: " + str(fallback_match))
+            return self.relative_to_project(fallback_match)
+
+        placeholder_path = "assets/img/占位图.png"
+        if allow_placeholder and self.check_file_exists(placeholder_path):
+            if self.verbose:
+                print("⚠ Warning: Image '" + str(src) + "' not found on disk or mapping. Falling back to placeholder.")
+            return placeholder_path
+
+        if self.verbose:
+            print("⚠ Warning: Image '" + str(src) + "' not found, and placeholder not found at '" + str(placeholder_path) + "'")
+        return src
+
+    def resolve_metadata_cover(self, metadata):
+        cover = metadata.get('image')
+        if not cover:
+            return metadata
+        resolved = self.resolve_image_src(self.normalize_cover_src(cover), allow_placeholder=True)
+        if resolved:
+            metadata['image'] = resolved
+        return metadata
+
+
+def resolve_image_src(src, resolver_context):
+    """
+    Public helper for callers/tests that need the shared resolver behavior.
+    """
+    if isinstance(resolver_context, ImageResolver):
+        return resolver_context.resolve_image_src(src)
+    return ImageResolver(resolver_context).resolve_image_src(src)
+
+
+def parse_image_params(params_str):
+    params = {}
+    for p in params_str.split(';'):
+        if '=' in p:
+            k, v = p.split('=', 1)
+            params[k.strip()] = v.strip()
+    return params
+
+
+def process_soup_images(soup, resolver):
+    """
+    Applies custom image styles, cleans width/height attrs, and resolves sources.
+    """
+    for img in soup.find_all('img'):
+        sibling = img.next_sibling
+        if sibling and isinstance(sibling, str):
+            stripped_sibling = sibling.lstrip()
+            if stripped_sibling.startswith('{'):
+                match = re.match(r'^\{(.*?)\}', stripped_sibling)
+                if match:
+                    apply_image_node_styles(img, parse_image_params(match.group(1)))
+                    rest = stripped_sibling[match.end():]
+                    orig_space = sibling[:len(sibling) - len(stripped_sibling)]
+                    sibling.replace_with(orig_space + rest)
+
+        width = img.get('width')
+        height = img.get('height')
+        style_additions = []
+        if width:
+            img.attrs.pop('width', None)
+            width_str = width + "px" if width.isdigit() else width
+            style_additions.append("width: " + width_str + ";")
+        if height:
+            img.attrs.pop('height', None)
+            height_str = height + "px" if height.isdigit() else height
+            style_additions.append("height: " + height_str + ";")
+        if style_additions:
+            style_additions.append("object-fit: cover;")
+            new_styles = " ".join(style_additions)
+            existing_style = img.get('style', '').strip()
+            if existing_style:
+                if not existing_style.endswith(';'):
+                    existing_style += ';'
+                img['style'] = existing_style + " " + new_styles
+            else:
+                img['style'] = new_styles
+
+        src = img.get('src', '').strip()
+        if src and not src.startswith(('http://', 'https://')):
+            img['src'] = resolver.resolve_image_src(src)
+
+
+def append_external_link_footnotes(soup):
+    """
+    Converts non-WeChat external links to WeChat-safe footnote references.
+    """
+    external_links = []
+    for a in soup.find_all('a'):
+        href = a.get('href', '').strip()
+        text = a.get_text().strip()
+        if not href or href.startswith('#') or 'mp.weixin.qq.com' in href:
+            continue
+
+        existing_hrefs = [x['href'] for x in external_links]
+        if href in existing_hrefs:
+            index = existing_hrefs.index(href) + 1
+        else:
+            external_links.append({'href': href, 'title': text or href})
+            index = len(external_links)
+
+        sup = soup.new_tag('sup')
+        sup.string = "[" + str(index) + "]"
+        a.append(sup)
+
+    if not external_links:
+        return
+
+    soup.append(soup.new_tag('hr'))
+    h4 = soup.new_tag('h4')
+    h4.string = "引用链接"
+    soup.append(h4)
+
+    for idx, link_info in enumerate(external_links, 1):
+        p = soup.new_tag('p')
+        p['style'] = "font-size: 14px; color: #888; line-height: 1.6; margin: 5px 0;"
+        code = soup.new_tag('code')
+        code['style'] = "font-size: 90%; opacity: 0.6; background-color: #f3f4f5; padding: 2px 4px; border-radius: 4px;"
+        code.string = "[" + str(idx) + "]"
+        p.append(code)
+        p.append(" " + str(link_info['title']) + ": ")
+        i_tag = soup.new_tag('i')
+        i_tag['style'] = "word-break: break-all; color: #576b95;"
+        i_tag.string = link_info['href']
+        p.append(i_tag)
+        soup.append(p)
+
+
+def cleanup_list_text_nodes(soup):
+    for list_tag in soup.find_all(['ul', 'ol']):
+        for child in list(list_tag.children):
+            if not child.name and isinstance(child, str) and not child.strip():
+                child.extract()
+
+
+def _move_colon_into_strong(soup, target):
+    for strong in target.find_all('strong'):
+        siblings_to_move = []
+        curr = strong.next_sibling
+        colon_part = None
+        remaining_text = None
+
+        while curr:
+            if getattr(curr, 'name', None) in ('strong', 'br', 'p', 'div', 'section', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'td', 'tr', 'table'):
+                break
+            if not getattr(curr, 'name', None) and isinstance(curr, str):
+                curr_text = str(curr)
+                match = re.match(r'^(\s*[:：]\s*)', curr_text)
+                if match:
+                    colon_part = match.group(1)
+                    remaining_text = curr_text[len(colon_part):]
+                break
+            siblings_to_move.append(curr)
+            curr = curr.next_sibling
+
+        if colon_part is None:
+            continue
+
+        for sib in siblings_to_move:
+            strong.append(sib)
+        strong.append(soup.new_string(colon_part))
+        if curr:
+            if remaining_text:
+                curr.replace_with(soup.new_string(remaining_text))
+            else:
+                curr.extract()
+
+        existing_style = strong.get('style', '').strip()
+        nowrap_rule = "white-space: nowrap !important;"
+        strong['style'] = (existing_style + (" " if existing_style.endswith(';') else "; ") + nowrap_rule) if existing_style else nowrap_rule
+        return True
+    return False
+
+
+def _wrap_prefix_to_colon(soup, target, prepend_nbsp=False):
+    text = target.get_text()
+    colon_match = re.search(r'[:：]', text)
+    if not colon_match:
+        return False
+
+    children = list(target.contents)
+    nodes_to_wrap = []
+    remaining_nodes = []
+    current_len = 0
+    found = False
+
+    for child in children:
+        if found:
+            remaining_nodes.append(child)
+            continue
+
+        child_text = child.get_text() if hasattr(child, 'get_text') else str(child)
+        child_len = len(child_text)
+        if current_len <= colon_match.start() < current_len + child_len:
+            found = True
+            rel_idx = colon_match.start() - current_len
+            if not hasattr(child, 'name') or child.name is None:
+                left_text = child[:rel_idx + 1]
+                right_text = child[rel_idx + 1:]
+                spaces = ""
+                while right_text and right_text[0] in (' ', '\t'):
+                    spaces += right_text[0]
+                    right_text = right_text[1:]
+                nodes_to_wrap.append(soup.new_string(left_text + spaces))
+                if right_text:
+                    remaining_nodes.append(soup.new_string(right_text))
+            else:
+                nodes_to_wrap.append(child)
+        else:
+            nodes_to_wrap.append(child)
+            current_len += child_len
+
+    if not nodes_to_wrap:
+        return False
+
+    target.clear()
+    if prepend_nbsp:
+        target.append(soup.new_string('\u00a0'))
+    span_tag = soup.new_tag('span')
+    span_tag['style'] = 'white-space: nowrap !important;'
+    for node in nodes_to_wrap:
+        span_tag.append(node)
+    target.append(span_tag)
+    for node in remaining_nodes:
+        target.append(node)
+    return True
+
+
+def apply_list_nowrap(soup):
+    for li in soup.find_all('li'):
+        text = li.get_text().strip()
+        if text and text[0].isdigit() and ('：' in text or ': ' in text):
+            if any(img.get('alt') in ('红星', '黄星') for img in li.find_all('img')) or '星' in text:
+                existing_style = li.get('style', '').strip()
+                nowrap_rule = "white-space: nowrap !important;"
+                li['style'] = (existing_style + (" " if existing_style.endswith(';') else "; ") + nowrap_rule) if existing_style else nowrap_rule
+                continue
+
+        target = li.find('p') or li
+        if _move_colon_into_strong(soup, target):
+            continue
+        _wrap_prefix_to_colon(soup, target)
+
+
+def apply_table_nowrap(soup):
+    for td in soup.find_all('td'):
+        if 'white-space: nowrap' in td.get('style', ''):
+            continue
+        text = td.get_text()
+        colon_match = re.search(r'[:：]', text)
+        if not colon_match or colon_match.start() > 40:
+            continue
+        if _move_colon_into_strong(soup, td):
+            continue
+        _wrap_prefix_to_colon(soup, td, prepend_nbsp=True)
+
+
+def translate_params_to_pandoc(params_str):
+    params = parse_image_params(params_str)
+    img_type = params.get('type')
+    width_val = None
+    height_val = None
+
+    if img_type in ('icon', 'center') or params.get('icon') == 'card':
+        if img_type == 'icon' or params.get('icon') == 'card':
+            width_val, height_val = '24px', '24px'
+        else:
+            w = params.get('w')
+            if w:
+                width_val = w + 'px' if w.isdigit() else w
+            h = params.get('h')
+            if h:
+                height_val = h + 'px' if h.isdigit() else h
+    elif img_type in ('avatar', 'acatar'):
+        # Keep the legacy "acatar" typo as a compatibility alias for avatar.
+        width_val, height_val = '30px', '30px'
+    elif img_type in ('float-left', 'float-right'):
+        width_val, height_val = '80px', '80px'
+    elif img_type == 'card':
+        width_val = '90%'
+    elif img_type == 'banner':
+        width_val = '100%'
+    elif img_type == 'grid2':
+        width_val = '48%'
+    elif img_type == 'grid3':
+        width_val = '31.3%'
+    elif img_type == 'grid4':
+        width_val = '23%'
+    else:
+        w = params.get('w')
+        if w:
+            width_val = w + 'px' if w.isdigit() else w
+        h = params.get('h')
+        if h:
+            height_val = h + 'px' if h.isdigit() else h
+
+    out_parts = []
+    if width_val:
+        out_parts.append(f'width={width_val}')
+    if height_val:
+        out_parts.append(f'height={height_val}')
+    return ' '.join(out_parts)
+
+
+def wrap_wechat_html(final_html, project_config):
+    font_family = project_config.get("container_font", "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif")
+    container_style = "font-family: " + str(font_family) + "; padding: 15px; max-width: 100%; box-sizing: border-box; font-size: 16px; color: #333; line-height: 1.8; word-wrap: break-word; text-align: justify;"
+    return '<meta name="referrer" content="no-referrer">\n<div style="' + container_style + '">\n' + final_html + '\n</div>'
+
+
 def convert_to_wechat_html(md_content, project_config, input_dir=None):
     """
     Converts Markdown content to HTML with inline CSS styles optimized for WeChat.
@@ -139,150 +600,11 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
     Returns:
         A tuple of (wrapped_html, metadata).
     """
-    assets_dir = project_config.get("assets_dir")
-    image_mapping_path = project_config.get("image_mapping_path")
-    highlight_rules_path = project_config.get("highlight_rules_path")
     theme_path = project_config.get("theme_path")
-    placeholder_dir = project_config.get("placeholder_dir") or (assets_dir and os.path.join(assets_dir, "img"))
-    
-    if placeholder_dir:
-        ensure_placeholder_exists(placeholder_dir)
-
-    assets_cache = scan_assets(assets_dir) if assets_dir else {}
-
-    def check_file_exists(p, input_dir=None):
-        if not p:
-            return False
-        if os.path.isabs(p) and os.path.exists(p):
-            return True
-        if assets_dir and os.path.exists(os.path.join(assets_dir, "..", p)):
-            return True
-        if input_dir and os.path.exists(os.path.join(input_dir, p)):
-            return True
-        return False
-
-    def get_relative_to_project(p, input_dir=None):
-        # Relativize against the root containing assets_dir
-        project_root = os.path.dirname(assets_dir) if assets_dir else ""
-        if not project_root:
-            return p
-        if os.path.isabs(p):
-            try:
-                rel = os.path.relpath(p, project_root).replace('\\', '/')
-                if not rel.startswith('..'):
-                    return rel
-            except ValueError:
-                pass
-            return p
-        if input_dir and os.path.exists(os.path.join(input_dir, p)):
-            abs_p = os.path.abspath(os.path.join(input_dir, p))
-            try:
-                rel = os.path.relpath(abs_p, project_root).replace('\\', '/')
-                if not rel.startswith('..'):
-                    return rel
-            except ValueError:
-                pass
-            return abs_p
-        return p
-
-    metadata = {}
-    # Extract Frontmatter
-    if md_content.startswith('---'):
-        parts = re.split(r'^---', md_content, maxsplit=2, flags=re.MULTILINE)
-        if len(parts) >= 3:
-            try:
-                metadata = yaml.safe_load(parts[1]) or {}
-                md_content = parts[2]
-            except Exception as e:
-                print("⚠ Warning: Failed to parse frontmatter: " + str(e))
-
-    # 0. Preprocess Lists to prevent Python-Markdown from merging distinct list types or blocks
-    # Clean up empty list items (e.g. "* " or "1. " with nothing after them) to prevent rendering empty elements
-    md_content = re.sub(r'^[ \t]*[*+-]\s*$\n?', '', md_content, flags=re.MULTILINE)
-    md_content = re.sub(r'^[ \t]*\d+\.\s*$\n?', '', md_content, flags=re.MULTILINE)
-
-    # Merge colon-wrapped break lines inside list items (e.g. * Item \n : description) to prevent unexpected line breaks
-    md_content = re.sub(r'(^[ \t]*[*+-]\s+[^\n]+)\n[ \t]*[:：]\s*', r'\1：', md_content, flags=re.MULTILINE)
-    md_content = re.sub(r'(^[ \t]*\d+\.\s+[^\n]+)\n[ \t]*[:：]\s*', r'\1：', md_content, flags=re.MULTILINE)
-
-    # Remove GitHub style admonitions (e.g. [!IMPORTANT], [!TIP]) in blockquotes
-    md_content = re.sub(r'^[ \t]*>\s*\[!(IMPORTANT|TIP|NOTE|WARNING|CAUTION)\][ \t]*\n?', '', md_content, flags=re.IGNORECASE | re.MULTILINE)
-
-    # Cut off: Unordered -> Ordered list
-    md_content = re.sub(
-        r'(^[ \t]*[*+-]\s+[^\n]*)(?:\n[ \t]*)*(?=\n[ \t]*\d+\.\s+)',
-        r'\1\n\n<!-- -->',
-        md_content,
-        flags=re.MULTILINE
-    )
-    # Cut off: Ordered -> Unordered list
-    md_content = re.sub(
-        r'(^[ \t]*\d+\.\s+[^\n]*)(?:\n[ \t]*)*(?=\n[ \t]*[*+-]\s+)',
-        r'\1\n\n<!-- -->',
-        md_content,
-        flags=re.MULTILINE
-    )
-    # Cut off: Ordered -> Another new Ordered list starting with 1.
-    md_content = re.sub(
-        r'(^[ \t]*\d+\.\s+[^\n]*)(?:\n[ \t]*)*(?=\n[ \t]*1\.\s+)',
-        r'\1\n\n<!-- -->',
-        md_content,
-        flags=re.MULTILINE
-    )
-
-    # 0.5 Preprocess image shorthand: {{名称}} or {{名称|type=card}} etc.
-    # - {{名称}} -> ![名称](img://名称){type=icon}
-    # - {{名称|type=card}} -> ![名称](img://名称){type=card}
-    # Must run before Ruby annotation preprocessing (which uses single {})
-    def _expand_shorthand(m):
-        content = m.group(1)
-        if '|' in content:
-            name, params = content.split('|', 1)
-            name, params = name.strip(), params.strip()
-        else:
-            name, params = content.strip(), 'type=icon'
-        return '![' + name + '](img://' + name + '){' + params + '}'
-    md_content = re.sub(r'\{\{([^}]+)\}\}', _expand_shorthand, md_content)
-
-    # 1. Preprocess Ruby Annotations: [文字]{注音} -> <ruby>文字<rt>注音</rt></ruby>
-    md_content = re.sub(r'\[([^\]\n]+)\]\{([a-zA-Z0-9\sāáǎàēéěèīíǐìōóǒòūúǔùüǘǚǜ]+)\}', r'<ruby>\1<rt>\2</rt></ruby>', md_content)
-
-    # 1.5 Preprocess link-style image references [name](img://path) to ![name](img://path)
-    md_content = re.sub(r'(?<!\!)\[([^\]\n]+)\]\((img://[^\)\n]+)\)', r'![\1](\2)', md_content)
-
-    # 2. Dynamic numerical highlights loaded from highlight rules (Commented out)
-    # if highlight_rules_path:
-    #     rules = load_highlight_rules(highlight_rules_path)
-    #     md_content = apply_highlight_rules(md_content, rules)
-
-    # Load image mapping dictionary
-    image_mapping = load_image_mapping(image_mapping_path) if image_mapping_path else {}
-
-    # Resolve metadata cover image if it exists in frontmatter
-    cover = metadata.get('image')
-    if cover:
-        cover_clean = cover.replace('img://', '').replace('[占位图:', '').replace('[占位图', '').replace(']', '').strip()
-        cover_clean = cover_clean.lstrip(':').strip()
-        base_name = os.path.basename(cover_clean)
-        key_name = os.path.splitext(base_name)[0]
-        
-        resolved = None
-        mapped_path = image_mapping.get(cover_clean) or image_mapping.get(base_name) or image_mapping.get(key_name)
-        if mapped_path and check_file_exists(mapped_path, input_dir):
-            resolved = get_relative_to_project(mapped_path, input_dir)
-        elif check_file_exists(cover_clean, input_dir):
-            resolved = get_relative_to_project(cover_clean, input_dir)
-        else:
-            fallback_match = assets_cache.get(key_name.lower()) or assets_cache.get(base_name.lower())
-            if fallback_match:
-                resolved = get_relative_to_project(fallback_match, input_dir)
-            else:
-                placeholder_path = "assets/img/占位图.png"
-                if check_file_exists(placeholder_path):
-                    resolved = placeholder_path
-        
-        if resolved:
-            metadata['image'] = resolved
+    resolver = ImageResolver(project_config, input_dir=input_dir, verbose=True)
+    md_content, metadata = extract_frontmatter(md_content)
+    md_content = preprocess_markdown(md_content, project_config)
+    metadata = resolver.resolve_metadata_cover(metadata)
 
     # Render Markdown to raw HTML
     extensions = ['fenced_code', 'tables', 'nl2br', 'toc']
@@ -306,136 +628,9 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
     # Apply CSS Theme stylesheets
     apply_css_theme(soup, theme_path)
 
-    # Process images: style tags, clean width/height, and resolve paths in a single pass
-    for img in soup.find_all('img'):
-        # 1. Parse Custom Image Styles
-        sibling = img.next_sibling
-        if sibling and isinstance(sibling, str):
-            stripped_sibling = sibling.lstrip()
-            if stripped_sibling.startswith('{'):
-                match = re.match(r'^\{(.*?)\}', stripped_sibling)
-                if match:
-                    style_params = match.group(1)
-                    params = {}
-                    for p in style_params.split(';'):
-                        if '=' in p:
-                            k, v = p.split('=', 1)
-                            params[k.strip()] = v.strip()
-                            
-                    apply_image_node_styles(img, params)
-                    
-                    rest = stripped_sibling[match.end():]
-                    orig_space = sibling[:len(sibling)-len(stripped_sibling)]
-                    sibling.replace_with(orig_space + rest)
-
-        # 2. Clean Image width/height attributes
-        width = img.get('width')
-        height = img.get('height')
-        
-        style_additions = []
-        if width:
-            img.attrs.pop('width', None)
-            width_str = width + "px" if width.isdigit() else width
-            style_additions.append("width: " + width_str + ";")
-            
-        if height:
-            img.attrs.pop('height', None)
-            height_str = height + "px" if height.isdigit() else height
-            style_additions.append("height: " + height_str + ";")
-            
-        if style_additions:
-            style_additions.append("object-fit: cover;")
-            new_styles = " ".join(style_additions)
-            existing_style = img.get('style', '').strip()
-            if existing_style:
-                if not existing_style.endswith(';'):
-                    existing_style += ';'
-                img['style'] = existing_style + " " + new_styles
-            else:
-                img['style'] = new_styles
-
-        # 3. Resolve all image paths intelligently
-        src = img.get('src', '').strip()
-        if src and not src.startswith(('http://', 'https://')):
-            src_clean = src.replace('img://', '')
-            base_name = os.path.basename(src_clean)
-            key_name = os.path.splitext(base_name)[0]
-            
-            resolved = None
-            mapped_path = image_mapping.get(src_clean) or image_mapping.get(base_name) or image_mapping.get(key_name)
-            if mapped_path and check_file_exists(mapped_path, input_dir):
-                resolved = get_relative_to_project(mapped_path, input_dir)
-            elif check_file_exists(src_clean, input_dir):
-                resolved = get_relative_to_project(src_clean, input_dir)
-            else:
-                fallback_match = assets_cache.get(key_name.lower()) or assets_cache.get(base_name.lower())
-                if fallback_match:
-                    print("ℹ Auto-resolved missing image '" + str(src) + "' via folder scanning to: " + str(fallback_match))
-                    resolved = get_relative_to_project(fallback_match, input_dir)
-                else:
-                    placeholder_path = "assets/img/占位图.png"
-                    if check_file_exists(placeholder_path):
-                        print("⚠ Warning: Image '" + str(src) + "' not found on disk or mapping. Falling back to placeholder.")
-                        resolved = placeholder_path
-                    else:
-                        print("⚠ Warning: Image '" + str(src) + "' not found, and placeholder not found at '" + str(placeholder_path) + "'")
-            
-            if resolved:
-                img['src'] = resolved
-
-    # Convert External Hyperlinks to Footnotes
-    external_links = []
-    for a in soup.find_all('a'):
-        href = a.get('href', '').strip()
-        text = a.get_text().strip()
-        
-        if not href or href.startswith('#') or 'mp.weixin.qq.com' in href:
-            continue
-            
-        # Deduplicate links to match the same index
-        existing_hrefs = [x['href'] for x in external_links]
-        if href in existing_hrefs:
-            index = existing_hrefs.index(href) + 1
-        else:
-            external_links.append({'href': href, 'title': text or href})
-            index = len(external_links)
-            
-        sup = soup.new_tag('sup')
-        sup.string = "[" + str(index) + "]"
-        a.append(sup)
-
-    if external_links:
-        # We append a divider
-        hr = soup.new_tag('hr')
-        soup.append(hr)
-        
-        h4 = soup.new_tag('h4')
-        h4.string = "引用链接"
-        soup.append(h4)
-        
-        for idx, link_info in enumerate(external_links, 1):
-            p = soup.new_tag('p')
-            p['style'] = "font-size: 14px; color: #888; line-height: 1.6; margin: 5px 0;"
-            
-            code = soup.new_tag('code')
-            code['style'] = "font-size: 90%; opacity: 0.6; background-color: #f3f4f5; padding: 2px 4px; border-radius: 4px;"
-            code.string = "[" + str(idx) + "]"
-            
-            p.append(code)
-            p.append(" " + str(link_info['title']) + ": ")
-            
-            i_tag = soup.new_tag('i')
-            i_tag['style'] = "word-break: break-all; color: #576b95;"
-            i_tag.string = link_info['href']
-            
-            p.append(i_tag)
-            soup.append(p)
-
-    # Clean up empty text nodes inside <ul> and <ol> to prevent WeChat editor from generating extra list items
-    for list_tag in soup.find_all(['ul', 'ol']):
-        for child in list(list_tag.children):
-            if not child.name and isinstance(child, str) and not child.strip():
-                child.extract()
+    process_soup_images(soup, resolver)
+    append_external_link_footnotes(soup)
+    cleanup_list_text_nodes(soup)
 
     # Process list items: star list item nowrap and colon wrapping prevention in a single pass
     for li in soup.find_all('li'):
@@ -703,174 +898,15 @@ def convert_to_optimized_markdown(md_content, project_config, input_dir=None):
     Converts Markdown content to an optimized Markdown version, resolving all shorthand,
     image mappings, cover image, and highlight rules, while keeping the Markdown syntax.
     """
-    assets_dir = project_config.get("assets_dir")
-    image_mapping_path = project_config.get("image_mapping_path")
-    highlight_rules_path = project_config.get("highlight_rules_path")
-    placeholder_dir = project_config.get("placeholder_dir") or (assets_dir and os.path.join(assets_dir, "img"))
-    
-    if placeholder_dir:
-        ensure_placeholder_exists(placeholder_dir)
-
-    assets_cache = scan_assets(assets_dir) if assets_dir else {}
-    image_mapping = load_image_mapping(image_mapping_path) if image_mapping_path else {}
-
-    def check_file_exists(p, input_dir=None):
-        if not p:
-            return False
-        if os.path.isabs(p) and os.path.exists(p):
-            return True
-        if assets_dir and os.path.exists(os.path.join(assets_dir, "..", p)):
-            return True
-        if input_dir and os.path.exists(os.path.join(input_dir, p)):
-            return True
-        return False
-
-    def get_relative_to_project(p, input_dir=None):
-        project_root = os.path.dirname(assets_dir) if assets_dir else ""
-        if not project_root:
-            return p
-        if os.path.isabs(p):
-            try:
-                rel = os.path.relpath(p, project_root).replace('\\', '/')
-                if not rel.startswith('..'):
-                    return rel
-            except ValueError:
-                pass
-            return p
-        if input_dir and os.path.exists(os.path.join(input_dir, p)):
-            abs_p = os.path.abspath(os.path.join(input_dir, p))
-            try:
-                rel = os.path.relpath(abs_p, project_root).replace('\\', '/')
-                if not rel.startswith('..'):
-                    return rel
-            except ValueError:
-                pass
-            return abs_p
-        return p
-
-    def resolve_img_src(src):
-        src = src.strip()
-        if not src:
-            return src
-        if src.startswith(('http://', 'https://')):
-            return src
-            
-        src_clean = src.replace('img://', '')
-        base_name = os.path.basename(src_clean)
-        key_name = os.path.splitext(base_name)[0]
-        
-        resolved = None
-        mapped_path = image_mapping.get(src_clean) or image_mapping.get(base_name) or image_mapping.get(key_name)
-        if mapped_path and check_file_exists(mapped_path, input_dir):
-            resolved = get_relative_to_project(mapped_path, input_dir)
-        elif check_file_exists(src_clean, input_dir):
-            resolved = get_relative_to_project(src_clean, input_dir)
-        else:
-            fallback_match = assets_cache.get(key_name.lower()) or assets_cache.get(base_name.lower())
-            if fallback_match:
-                resolved = get_relative_to_project(fallback_match, input_dir)
-            else:
-                placeholder_path = "assets/img/占位图.png"
-                if check_file_exists(placeholder_path):
-                    resolved = placeholder_path
-        return resolved or src
-
-    metadata = {}
-    # Extract Frontmatter
-    if md_content.startswith('---'):
-        parts = re.split(r'^---', md_content, maxsplit=2, flags=re.MULTILINE)
-        if len(parts) >= 3:
-            try:
-                metadata = yaml.safe_load(parts[1]) or {}
-                md_content = parts[2]
-            except Exception as e:
-                print("⚠ Warning: Failed to parse frontmatter: " + str(e))
-
-    # Preprocess list items
-    md_content = re.sub(r'^[ \t]*[*+-]\s*$\n?', '', md_content, flags=re.MULTILINE)
-    md_content = re.sub(r'^[ \t]*\d+\.\s*$\n?', '', md_content, flags=re.MULTILINE)
-    md_content = re.sub(r'(^[ \t]*[*+-]\s+[^\n]+)\n[ \t]*[:：]\s*', r'\1：', md_content, flags=re.MULTILINE)
-    md_content = re.sub(r'(^[ \t]*\d+\.\s+[^\n]+)\n[ \t]*[:：]\s*', r'\1：', md_content, flags=re.MULTILINE)
-    md_content = re.sub(r'^[ \t]*>\s*\[!(IMPORTANT|TIP|NOTE|WARNING|CAUTION)\][ \t]*\n?', '', md_content, flags=re.IGNORECASE | re.MULTILINE)
-
-    # 1. Expand shorthands {{名称}} -> ![名称](img://名称){type=icon}
-    def _expand_shorthand(m):
-        content = m.group(1)
-        if '|' in content:
-            name, params = content.split('|', 1)
-            name, params = name.strip(), params.strip()
-        else:
-            name, params = content.strip(), 'type=icon'
-        return '![' + name + '](img://' + name + '){' + params + '}'
-    md_content = re.sub(r'\{\{([^}]+)\}\}', _expand_shorthand, md_content)
-
-    # 2. Ruby Annotations [文字]{注音} -> <ruby>文字<rt>注音</rt></ruby>
-    md_content = re.sub(r'\[([^\]\n]+)\]\{([a-zA-Z0-9\sāáǎàēéěèīíǐìōóǒòūúǔùüǘǚǜ]+)\}', r'<ruby>\1<rt>\2</rt></ruby>', md_content)
-
-    # 3. Link-style image references [name](img://path) to ![name](img://path)
-    md_content = re.sub(r'(?<!\!)\[([^\]\n]+)\]\((img://[^\)\n]+)\)', r'![\1](\2)', md_content)
-
-    # 4. Apply highlight rules (Commented out)
-    # if highlight_rules_path:
-    #     rules = load_highlight_rules(highlight_rules_path)
-    #     md_content = apply_highlight_rules(md_content, rules)
-
-    def translate_params_to_pandoc(params_str):
-        params = {}
-        for p in params_str.split(';'):
-            if '=' in p:
-                k, v = p.split('=', 1)
-                params[k.strip()] = v.strip()
-                
-        img_type = params.get('type')
-        width_val = None
-        height_val = None
-        
-        if img_type in ('icon', 'center') or params.get('icon') == 'card':
-            if img_type == 'icon' or params.get('icon') == 'card':
-                width_val, height_val = '24px', '24px'
-            else:
-                w = params.get('w')
-                if w:
-                    width_val = w + 'px' if w.isdigit() else w
-                h = params.get('h')
-                if h:
-                    height_val = h + 'px' if h.isdigit() else h
-        elif img_type in ('avatar', 'acatar'):
-            width_val, height_val = '30px', '30px'
-        elif img_type in ('float-left', 'float-right'):
-            width_val, height_val = '80px', '80px'
-        elif img_type == 'card':
-            width_val = '90%'
-        elif img_type == 'banner':
-            width_val = '100%'
-        elif img_type == 'grid2':
-            width_val = '48%'
-        elif img_type == 'grid3':
-            width_val = '31.3%'
-        elif img_type == 'grid4':
-            width_val = '23%'
-        else:
-            w = params.get('w')
-            if w:
-                width_val = w + 'px' if w.isdigit() else w
-            h = params.get('h')
-            if h:
-                height_val = h + 'px' if h.isdigit() else h
-                
-        out_parts = []
-        if width_val:
-            out_parts.append(f'width={width_val}')
-        if height_val:
-            out_parts.append(f'height={height_val}')
-            
-        return ' '.join(out_parts)
+    resolver = ImageResolver(project_config, input_dir=input_dir, verbose=False)
+    md_content, metadata = extract_frontmatter(md_content)
+    md_content = preprocess_markdown(md_content, project_config)
 
     # 5. Resolve all image paths in markdown syntax: ![alt](src)
     def _replace_markdown_img(m):
         alt = m.group(1)
         src = m.group(2)
-        resolved_src = resolve_img_src(src)
+        resolved_src = resolver.resolve_image_src(src)
         return '![' + alt + '](' + resolved_src + ')'
     md_content = re.sub(r'!\[([^\]\n]*)\]\(([^)\n]+)\)', _replace_markdown_img, md_content)
 
@@ -890,16 +926,12 @@ def convert_to_optimized_markdown(md_content, project_config, input_dir=None):
         before = m.group(1)
         src = m.group(2)
         after = m.group(3)
-        resolved_src = resolve_img_src(src)
+        resolved_src = resolver.resolve_image_src(src)
         return '<img ' + before + 'src="' + resolved_src + '"' + after + '>'
     md_content = re.sub(r'<img\s+([^>]*?)src=["\'](img://[^"\']+|[^"\']+)["\']([^>]*?)>', _replace_html_img, md_content)
 
     # 7. Resolve Cover Image in Metadata
-    cover = metadata.get('image')
-    if cover:
-        resolved_cover = resolve_img_src(cover)
-        if resolved_cover:
-            metadata['image'] = resolved_cover
+    metadata = resolver.resolve_metadata_cover(metadata)
 
     # Reconstruct the optimized Markdown file
     output_parts = []
@@ -915,4 +947,3 @@ def convert_to_optimized_markdown(md_content, project_config, input_dir=None):
     
     output_parts.append(md_content.lstrip('\n'))
     return '\n'.join(output_parts)
-

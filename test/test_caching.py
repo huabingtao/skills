@@ -3,7 +3,7 @@ import sys
 import unittest
 import json
 import shutil
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 # Add project root to path
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -87,6 +87,22 @@ class TestWeChatCaching(unittest.TestCase):
         mock_client.upload_content_image.assert_not_called()
         print("✅ Cache flow verification succeeded!")
 
+    @patch('engine.publisher.requests.get')
+    def test_remote_image_download_failure_preserves_html(self, mock_get):
+        mock_response = MagicMock()
+        mock_response.status_code = 404
+        mock_get.return_value = mock_response
+        mock_client = MagicMock()
+        html_input = '<img src="https://example.com/missing.png" style="width: 40px;" />'
+
+        cache = publisher.load_cache(self.test_cache_file)
+        html_output = publisher.process_content_images(
+            mock_client, html_input, self.test_dir, cache, self.test_cache_file
+        )
+
+        self.assertEqual(html_output, html_input)
+        mock_client.upload_content_image.assert_not_called()
+
 class TestScanAssetsCaching(unittest.TestCase):
     def setUp(self):
         self.temp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "temp_assets_test")
@@ -147,4 +163,3 @@ class TestScanAssetsCaching(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

@@ -20,7 +20,7 @@ description: 专为《弹壳特攻队》攻略提供一键美化排版与微信�
 ### 阶段一：文本整理与数值高亮 (Text Cleanup & Numeric Highlighting)
 1. **输入处理**：读取用户提供的原始 Markdown 文本。
 2. **规范化加粗**：将文中的装备、技能、宠物、道具等专有名词包裹为 `**【名称】**`（严格按照 `packs/danke/formatting_rules.md` 中的定义）。
-3. **数值高亮**：根据 `packs/danke/highlight_rules.json` 正则匹配文中的数字与数值，为其添加对应的 HTML 颜色标签（攻击/伤害标红，生命/防御标蓝，冷却/范围标绿）。
+3. **数值高亮**：在本阶段根据 `packs/danke/highlight_rules.json` 正则匹配文中的数字与数值，为其添加对应的 HTML 颜色标签（攻击/伤害标红，生命/防御标蓝，冷却/范围标绿）。后续 HTML 编译阶段默认不重复执行高亮，避免嵌套标记。
 4. **用户反馈**：
    * **展示内容**：处理后的高亮 Markdown 文本。
    * **询问问题**：*“数值高亮和名词强调已完成，您看是否满意？输入【继续】将进入阶段二（智能配图），或者输入您的修改意见。”*
@@ -39,7 +39,7 @@ description: 专为《弹壳特攻队》攻略提供一键美化排版与微信�
 
 ### 阶段三：编译微信 HTML 与外链处理 (WeChat HTML Compilation)
 1. **HTML 编译**：在后台调用 `scripts/compile.py --pack packs/danke` 编译成带内联 CSS 样式的 HTML。
-2. **样式适配**：自动加载 `themes/default.css` 注入到 HTML 的 style 属性，并剔除图片宽高属性防拉伸。
+2. **样式适配**：自动加载主题 CSS 注入到 HTML 的 style 属性，并剔除图片宽高属性防拉伸；不重复执行 Stage 1 已完成的数值高亮。
 3. **外链与注音**：将非微信的外链转换为脚注，处理 `[文字]{注音}` 为 `<ruby>` 标签。
 4. **用户反馈**：
    * **展示内容**：提供编译后的 HTML 预览或代码片段，并指出生成的 HTML 文件路径（如 `test/test_optimization_wechat.html`）。

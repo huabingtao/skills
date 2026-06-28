@@ -11,6 +11,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from engine.compiler import convert_to_wechat_html
+from engine.compiler import convert_to_optimized_markdown, preprocess_markdown
 from scripts.compile import load_project_config
 
 class TestWeChatCompiler(unittest.TestCase):
@@ -161,6 +162,38 @@ class TestWeChatCompiler(unittest.TestCase):
         html_attr, _ = convert_to_wechat_html(md_attr, self.project_config)
         # Should stay plain text instead of converting to <ruby>
         self.assertNotIn("<ruby>", html_attr)
+
+    def test_frontmatter_cover_and_shorthand_resolution(self):
+        """Verify metadata cover and {{name}} shorthand use the shared resolver."""
+        md = "---\ntitle: 封面测试\nimage: img://等离子剑\n---\n共鸣伤害{{共鸣伤害}}"
+        html, metadata = convert_to_wechat_html(md, self.project_config)
+        self.assertEqual(metadata["image"], "assets/img/收藏品/第4期/4-等离子剑.png")
+        soup = BeautifulSoup(html, 'html.parser')
+        img = soup.find('img', attrs={'alt': '共鸣伤害'})
+        self.assertIsNotNone(img)
+        self.assertIn("assets/img/技能图标/宠物技能/共鸣伤害.png", img.get('src', ''))
+        self.assertIn("width: 24px", img.get('style', ''))
+
+    def test_external_link_footnotes_deduplicate(self):
+        """Verify repeated external links share a single footnote index."""
+        md = "[A](https://example.com)\n[B](https://example.com)"
+        html, _ = convert_to_wechat_html(md, self.project_config)
+        soup = BeautifulSoup(html, 'html.parser')
+        self.assertEqual([sup.text for sup in soup.find_all('sup')], ["[1]", "[1]"])
+        self.assertEqual(soup.get_text().count("https://example.com"), 1)
+
+    def test_optimized_markdown_uses_shared_image_resolver(self):
+        """Verify optimized markdown resolves img:// paths through the same resolver."""
+        md = "---\nimage: img://等离子剑\n---\n{{共鸣伤害}}"
+        optimized = convert_to_optimized_markdown(md, self.project_config)
+        self.assertIn("image: assets/img/收藏品/第4期/4-等离子剑.png", optimized)
+        self.assertIn("![共鸣伤害](assets/img/技能图标/宠物技能/共鸣伤害.png){width=24px height=24px}", optimized)
+
+    def test_highlight_is_explicitly_opt_in_for_preprocess(self):
+        """Document the Stage 1/Stage 3 highlight contract in code."""
+        md = "暴击率+5%"
+        self.assertNotIn("<font", preprocess_markdown(md, self.project_config))
+        self.assertIn("<font", preprocess_markdown(md, self.project_config, enable_highlight=True))
 
 if __name__ == '__main__':
     unittest.main()
