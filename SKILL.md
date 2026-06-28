@@ -19,7 +19,7 @@ description: 专为《弹壳特攻队》攻略提供一键美化排版与微信�
 
 ### 阶段一：文本整理与数值高亮 (Text Cleanup & Numeric Highlighting)
 1. **输入处理**：读取用户提供的原始 Markdown 文本。
-2. **规范化加粗**：将文中的装备、技能、宠物、道具等专有名词包裹为 `**【名称】**`（严格按照 `packs/danke/formatting_rules.md` 中的定义）。
+2. **规范化加粗**：将文中的装备、技能、宠物、道具等专有名词直接加粗为 `**名称**`（去掉方括号，严格按照 `packs/danke/formatting_rules.md` 中的定义）。
 3. **数值高亮**：在本阶段根据 `packs/danke/highlight_rules.json` 正则匹配文中的数字与数值，为其添加对应的 HTML 颜色标签（攻击/伤害标红，生命/防御标蓝，冷却/范围标绿）。后续 HTML 编译阶段默认不重复执行高亮，避免嵌套标记。
 4. **用户反馈**：
    * **展示内容**：处理后的高亮 Markdown 文本。
