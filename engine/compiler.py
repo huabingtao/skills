@@ -275,6 +275,17 @@ class ImageResolver:
             return self.relative_to_project(src_clean)
 
         fallback_match = self.assets_cache.get(key_name.lower()) or self.assets_cache.get(base_name.lower())
+        if not fallback_match:
+            # Try prefix-stripped variants as a fallback
+            def strip_prefix(s):
+                parts = s.split('-', 1)
+                if len(parts) >= 2 and parts[0].isdigit():
+                    return parts[1]
+                return s
+            stripped_key = strip_prefix(key_name)
+            stripped_base = strip_prefix(base_name)
+            fallback_match = self.assets_cache.get(stripped_key.lower()) or self.assets_cache.get(stripped_base.lower())
+
         if fallback_match:
             if self.verbose:
                 print("ℹ Auto-resolved missing image '" + str(src) + "' via folder scanning to: " + str(fallback_match))

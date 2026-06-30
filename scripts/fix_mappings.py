@@ -28,6 +28,13 @@ def fix_image_mappings():
                 name_only = os.path.splitext(basename)[0]
                 disk_files[name_only] = rel_path
 
+    # Helper to strip 'number-' prefix
+    def strip_prefix(s):
+        parts = s.split('-', 1)
+        if len(parts) >= 2 and parts[0].isdigit():
+            return parts[1]
+        return s
+
     # Attempt to fix each mapping
     fixed_count = 0
     for key, path in list(mapping.items()):
@@ -36,6 +43,10 @@ def fix_image_mappings():
             # Try to resolve by filename
             basename = os.path.basename(path)
             name_only = os.path.splitext(basename)[0]
+            stripped_basename = strip_prefix(basename)
+            stripped_name_only = strip_prefix(name_only)
+            stripped_key = strip_prefix(key)
+
             if basename in disk_files:
                 mapping[key] = disk_files[basename]
                 print(f"Fixed mapping for '{key}': {path} -> {disk_files[basename]}")
@@ -44,14 +55,24 @@ def fix_image_mappings():
                 mapping[key] = disk_files[name_only]
                 print(f"Fixed mapping for '{key}': {path} -> {disk_files[name_only]}")
                 fixed_count += 1
+            elif stripped_basename in disk_files:
+                mapping[key] = disk_files[stripped_basename]
+                print(f"Fixed mapping for '{key}': {path} -> {disk_files[stripped_basename]}")
+                fixed_count += 1
+            elif stripped_name_only in disk_files:
+                mapping[key] = disk_files[stripped_name_only]
+                print(f"Fixed mapping for '{key}': {path} -> {disk_files[stripped_name_only]}")
+                fixed_count += 1
+            elif key in disk_files:
+                mapping[key] = disk_files[key]
+                print(f"Fixed mapping by key '{key}': {path} -> {disk_files[key]}")
+                fixed_count += 1
+            elif stripped_key in disk_files:
+                mapping[key] = disk_files[stripped_key]
+                print(f"Fixed mapping by stripped key '{key}': {path} -> {disk_files[stripped_key]}")
+                fixed_count += 1
             else:
-                # Try search by key name
-                if key in disk_files:
-                    mapping[key] = disk_files[key]
-                    print(f"Fixed mapping by key '{key}': {path} -> {disk_files[key]}")
-                    fixed_count += 1
-                else:
-                    print(f"Could not find replacement for '{key}': {path}")
+                print(f"Could not find replacement for '{key}': {path}")
 
     if fixed_count > 0:
         with open(mapping_path, 'w', encoding='utf-8') as f:

@@ -167,7 +167,7 @@ class TestWeChatCompiler(unittest.TestCase):
         """Verify metadata cover and {{name}} shorthand use the shared resolver."""
         md = "---\ntitle: 封面测试\nimage: img://等离子剑\n---\n共鸣伤害{{共鸣伤害}}"
         html, metadata = convert_to_wechat_html(md, self.project_config)
-        self.assertEqual(metadata["image"], "assets/img/收藏品/第4期/4-等离子剑.png")
+        self.assertEqual(metadata["image"], "assets/img/收藏品/史诗收藏品/第4期/等离子剑.png")
         soup = BeautifulSoup(html, 'html.parser')
         img = soup.find('img', attrs={'alt': '共鸣伤害'})
         self.assertIsNotNone(img)
@@ -186,7 +186,7 @@ class TestWeChatCompiler(unittest.TestCase):
         """Verify optimized markdown resolves img:// paths through the same resolver."""
         md = "---\nimage: img://等离子剑\n---\n{{共鸣伤害}}"
         optimized = convert_to_optimized_markdown(md, self.project_config)
-        self.assertIn("image: assets/img/收藏品/第4期/4-等离子剑.png", optimized)
+        self.assertIn("image: assets/img/收藏品/史诗收藏品/第4期/等离子剑.png", optimized)
         self.assertIn("![共鸣伤害](assets/img/技能图标/宠物技能/共鸣伤害.png){width=24px height=24px}", optimized)
 
     def test_highlight_is_explicitly_opt_in_for_preprocess(self):
