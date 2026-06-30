@@ -291,15 +291,9 @@ class ImageResolver:
                 print("ℹ Auto-resolved missing image '" + str(src) + "' via folder scanning to: " + str(fallback_match))
             return self.relative_to_project(fallback_match)
 
-        placeholder_path = "assets/img/占位图.png"
-        if allow_placeholder and self.check_file_exists(placeholder_path):
-            if self.verbose:
-                print("⚠ Warning: Image '" + str(src) + "' not found on disk or mapping. Falling back to placeholder.")
-            return placeholder_path
-
         if self.verbose:
-            print("⚠ Warning: Image '" + str(src) + "' not found, and placeholder not found at '" + str(placeholder_path) + "'")
-        return src
+            print("⚠ Warning: Image '" + str(src) + "' not found on disk or mapping. Leaving it blank.")
+        return ""
 
     def resolve_metadata_cover(self, metadata):
         cover = metadata.get('image')
