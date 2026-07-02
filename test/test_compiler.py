@@ -207,7 +207,7 @@ class TestWeChatCompiler(unittest.TestCase):
         soup = BeautifulSoup(html, 'html.parser')
         
         # Check that the section exists
-        rec_title = soup.find(lambda tag: tag.name == 'div' and "往期精彩推荐" in tag.get_text())
+        rec_title = soup.find(lambda tag: tag.name == 'section' and "往期精彩推荐" in tag.get_text())
         self.assertIsNotNone(rec_title)
         
         # Verify recommended articles
@@ -224,7 +224,7 @@ class TestWeChatCompiler(unittest.TestCase):
         html, _ = convert_to_wechat_html(md, self.project_config)
         soup = BeautifulSoup(html, 'html.parser')
         
-        rec_title = soup.find(lambda tag: tag.name == 'div' and "往期精彩推荐" in tag.get_text())
+        rec_title = soup.find(lambda tag: tag.name == 'section' and "往期精彩推荐" in tag.get_text())
         self.assertIsNone(rec_title)
 
     def test_qrcode_generation_with_placeholder(self):
@@ -234,10 +234,10 @@ class TestWeChatCompiler(unittest.TestCase):
         soup = BeautifulSoup(html, 'html.parser')
         
         # Check title and footer text
-        qr_title = soup.find(lambda tag: tag.name == 'div' and "扫码获取更多精彩" in tag.get_text())
+        qr_title = soup.find(lambda tag: tag.name == 'section' and "扫码获取更多精彩" in tag.get_text())
         self.assertIsNotNone(qr_title)
         
-        qr_footer = soup.find(lambda tag: tag.name == 'div' and "长按识别二维码关注「弹壳小能手」" in tag.get_text())
+        qr_footer = soup.find(lambda tag: tag.name == 'section' and "长按识别二维码关注「弹壳小能手」" in tag.get_text())
         self.assertIsNotNone(qr_footer)
         
         # Verify the QR code image points to api.qrserver.com with the custom URL
@@ -251,7 +251,7 @@ class TestWeChatCompiler(unittest.TestCase):
         html, _ = convert_to_wechat_html(md, self.project_config)
         soup = BeautifulSoup(html, 'html.parser')
         
-        qr_title = soup.find(lambda tag: tag.name == 'div' and "扫码获取更多精彩" in tag.get_text())
+        qr_title = soup.find(lambda tag: tag.name == 'section' and "扫码获取更多精彩" in tag.get_text())
         self.assertIsNone(qr_title)
 
     def test_qrcode_default_static_image(self):

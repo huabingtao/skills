@@ -750,30 +750,32 @@ def build_recommendations_section(soup, project_config, input_dir, metadata):
     if not recs:
         return None
 
-    # 3. Build the beautiful WeChat HTML block
+    # 3. Build the HTML block using <section> tags for WeChat Official Account compatibility
     # Get primary brand color (default to red highlight color #ff4d4f)
     brand_color = "#ff4d4f"
 
-    rec_div = soup.new_tag('div')
+    rec_div = soup.new_tag('section')
     rec_div['style'] = (
-        f"margin: 30px 8px 20px 8px; "
-        f"padding: 16px 20px; "
-        f"background-color: #f8fafc; "
-        f"border-left: 5px solid {brand_color}; "
-        f"border-radius: 4px 8px 8px 4px; "
-        f"box-shadow: 0 2px 8px rgba(0,0,0,0.03); "
-        f"box-sizing: border-box;"
+        "margin: 30px auto 20px auto; "
+        "max-width: 360px; "
+        "padding: 24px 20px; "
+        "background-color: #f8fafc; "
+        "border: 1px dashed #e2e8f0; "
+        "border-radius: 12px; "
+        "box-sizing: border-box; "
+        "display: block;"
     )
 
-    title_div = soup.new_tag('div')
+    # Title
+    title_div = soup.new_tag('section')
     title_div['style'] = (
         "font-weight: bold; "
         "color: #1e293b; "
-        "font-size: 15px; "
-        "display: flex; "
-        "align-items: center; "
-        "margin-bottom: 12px; "
-        "letter-spacing: 0.5px;"
+        "font-size: 16px; "
+        "margin-bottom: 16px; "
+        "letter-spacing: 0.5px; "
+        "text-align: center; "
+        "display: block;"
     )
 
     emoji_span = soup.new_tag('span')
@@ -787,17 +789,21 @@ def build_recommendations_section(soup, project_config, input_dir, metadata):
 
     rec_div.append(title_div)
 
-    ul_tag = soup.new_tag('ul')
-    ul_tag['style'] = "list-style: none; margin: 0; padding: 0; line-height: 1.8;"
-
+    # List items
     for item in recs:
-        li_tag = soup.new_tag('li')
-        li_tag['style'] = "margin: 8px 0; font-size: 14px; display: flex; align-items: flex-start;"
+        item_sec = soup.new_tag('section')
+        item_sec['style'] = (
+            "margin: 10px 0; "
+            "font-size: 14px; "
+            "text-align: left; "
+            "display: block; "
+            "line-height: 1.6;"
+        )
 
         arrow_span = soup.new_tag('span')
         arrow_span['style'] = f"color: {brand_color}; margin-right: 8px; font-size: 12px; line-height: 20px;"
         arrow_span.string = "👉"
-        li_tag.append(arrow_span)
+        item_sec.append(arrow_span)
 
         a_tag = soup.new_tag('a')
         a_tag['href'] = item['url']
@@ -805,10 +811,9 @@ def build_recommendations_section(soup, project_config, input_dir, metadata):
         a_tag['style'] = f"color: {brand_color}; text-decoration: none; font-weight: bold; line-height: 20px; word-break: break-all;"
         a_tag.string = item['title']
 
-        li_tag.append(a_tag)
-        ul_tag.append(li_tag)
+        item_sec.append(a_tag)
+        rec_div.append(item_sec)
 
-    rec_div.append(ul_tag)
     return rec_div
 
 
@@ -894,8 +899,8 @@ def build_qrcode_section(soup, project_config, input_dir, metadata):
     # Get author name for display (default to 弹壳呱呱)
     author_name = metadata.get('author') or project_config.get('author') or "弹壳呱呱"
     
-    # 2. Build the HTML block
-    qr_div = soup.new_tag('div')
+    # 2. Build the HTML block using <section> tags for WeChat Official Account compatibility
+    qr_div = soup.new_tag('section')
     qr_div['style'] = (
         "margin: 30px auto 20px auto; "
         "max-width: 360px; "
@@ -904,56 +909,66 @@ def build_qrcode_section(soup, project_config, input_dir, metadata):
         "border: 1px dashed #e2e8f0; "
         "border-radius: 12px; "
         "text-align: center; "
-        "box-sizing: border-box;"
+        "box-sizing: border-box; "
+        "display: block;"
     )
 
     # Title
-    title_div = soup.new_tag('div')
+    title_div = soup.new_tag('section')
     title_div['style'] = (
         "font-weight: bold; "
         "color: #1e293b; "
         "font-size: 16px; "
         "margin-bottom: 4px; "
-        "letter-spacing: 0.5px;"
+        "letter-spacing: 0.5px; "
+        "text-align: center; "
+        "display: block;"
     )
     title_div.string = "扫码获取更多精彩"
     qr_div.append(title_div)
 
     # Subtitle
-    subtitle_div = soup.new_tag('div')
+    subtitle_div = soup.new_tag('section')
     subtitle_div['style'] = (
         "font-size: 13px; "
         "color: #64748b; "
-        "margin-bottom: 20px;"
+        "margin-bottom: 20px; "
+        "text-align: center; "
+        "display: block;"
     )
     subtitle_div.string = "最新活动 · 特工 · 配件 · 宠物攻略"
     qr_div.append(subtitle_div)
 
     # QR Code Wrap
-    wrap_div = soup.new_tag('div')
+    wrap_div = soup.new_tag('section')
     wrap_div['style'] = (
-        "display: inline-block; "
+        "display: block; "
+        "width: 198px; "
+        "margin: 0 auto 16px auto; "
         "padding: 8px; "
         "background: #ffffff; "
         "border: 1px solid #e2e8f0; "
         "border-radius: 8px; "
         "box-shadow: 0 4px 12px rgba(0,0,0,0.05); "
-        "margin-bottom: 16px;"
+        "box-sizing: border-box; "
+        "text-align: center;"
     )
     
     img_tag = soup.new_tag('img')
     img_tag['src'] = qr_src
-    img_tag['style'] = "width: 180px; height: 180px; display: block; object-fit: contain;"
+    img_tag['style'] = "width: 180px; height: 180px; display: block; margin: 0 auto; object-fit: contain;"
     img_tag['alt'] = "二维码"
     wrap_div.append(img_tag)
     qr_div.append(wrap_div)
 
     # Footer
-    footer_div = soup.new_tag('div')
+    footer_div = soup.new_tag('section')
     footer_div['style'] = (
         "font-size: 12px; "
         "color: #94a3b8; "
-        "letter-spacing: 1px;"
+        "letter-spacing: 1px; "
+        "text-align: center; "
+        "display: block;"
     )
     footer_div.string = f"长按识别二维码关注「{author_name}」"
     qr_div.append(footer_div)
