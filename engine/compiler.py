@@ -180,15 +180,20 @@ def preprocess_markdown(md_content, project_config=None, enable_highlight=None):
     )
 
     def _expand_shorthand(m):
-        content = m.group(1)
+        content = m.group(1).strip()
+        if content in ("往期推荐", "往期精彩推荐", "扫码获取更多精彩"):
+            return m.group(0)
+        params_str = m.group(2) if m.group(2) else ''
         if '|' in content:
             name, params = content.split('|', 1)
             name, params = name.strip(), params.strip()
         else:
-            name, params = content.strip(), 'type=icon'
+            name, params = content, 'type=icon'
+        if params_str:
+            params = params_str.strip()
         return '![' + name + '](img://' + name + '){' + params + '}'
 
-    md_content = re.sub(r'\{\{([^}]+)\}\}', _expand_shorthand, md_content)
+    md_content = re.sub(r'\{\{([^}]+)\}\}(?:\{([^}]+)\})?', _expand_shorthand, md_content)
     md_content = re.sub(r'\[([^\]\n]+)\]\{([a-zA-Z0-9\sāáǎàēéěèīíǐìōóǒòūúǔùüǘǚǜ]+)\}', r'<ruby>\1<rt>\2</rt></ruby>', md_content)
     md_content = re.sub(r'(?<!\!)\[([^\]\n]+)\]\((img://[^\)\n]+)\)', r'![\1](\2)', md_content)
 
@@ -365,6 +370,16 @@ def process_soup_images(soup, resolver):
         if src and not src.startswith(('http://', 'https://')):
             img['src'] = resolver.resolve_image_src(src)
 
+    # Clean up <br/> tags between consecutive inline-block/grid images
+    for br in list(soup.find_all('br')):
+        prev_node = br.find_previous_sibling()
+        next_node = br.find_next_sibling()
+        if prev_node and prev_node.name == 'img' and next_node and next_node.name == 'img':
+            prev_style = prev_node.get('style', '')
+            next_style = next_node.get('style', '')
+            if 'inline-block' in prev_style and 'inline-block' in next_style:
+                br.extract()
+
 
 def append_external_link_footnotes(soup):
     """
@@ -409,6 +424,55 @@ def append_external_link_footnotes(soup):
         i_tag.string = link_info['href']
         p.append(i_tag)
         soup.append(p)
+
+
+def fix_strong_colon_wrapping(soup, target):
+    """
+    Finds strong tags in target and pulls any trailing colons (and intervening inline elements)
+    inside the strong tag, and marks the strong tag with nowrap to prevent break.
+    """
+    for strong in target.find_all('strong'):
+        siblings_to_move = []
+        curr = strong.next_sibling
+        colon_found = False
+        colon_part = None
+        remaining_text = None
+        
+        while curr:
+            if getattr(curr, 'name', None) in ('strong', 'br', 'p', 'div', 'section', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'td', 'tr', 'table'):
+                break
+            elif not getattr(curr, 'name', None) and isinstance(curr, str):
+                curr_text = str(curr)
+                m = re.match(r'^(\s*[:：]\s*)', curr_text)
+                if m:
+                    colon_part = m.group(1)
+                    remaining_text = curr_text[len(colon_part):]
+                    colon_found = True
+                    break
+                else:
+                    break
+            else:
+                siblings_to_move.append(curr)
+            curr = curr.next_sibling
+            
+        if colon_found:
+            for sib in siblings_to_move:
+                strong.append(sib)
+            strong.append(soup.new_string(colon_part))
+            if curr:
+                if remaining_text:
+                    curr.replace_with(soup.new_string(remaining_text))
+                else:
+                    curr.extract()
+            # Mark the strong tag with nowrap inline style to protect it from line break
+            existing_style = strong.get('style', '').strip()
+            nowrap_rule = "display: inline-block !important; white-space: nowrap !important;"
+            if existing_style:
+                if not existing_style.endswith(';'):
+                    existing_style += ';'
+                strong['style'] = existing_style + " " + nowrap_rule
+            else:
+                strong['style'] = nowrap_rule
 
 
 def cleanup_list_text_nodes(soup):
@@ -593,6 +657,341 @@ def wrap_wechat_html(final_html, project_config):
     return '<meta name="referrer" content="no-referrer">\n<div style="' + container_style + '">\n' + final_html + '\n</div>'
 
 
+def build_recommendations_section(soup, project_config, input_dir, metadata):
+    """
+    Builds the beautiful '往期精彩推荐' (Past Recommendations) section tag.
+    """
+    recs = []
+
+    # 1. Check if explicit recommendations exist in metadata
+    explicit_recs = metadata.get('recommendations')
+    if explicit_recs:
+        for item in explicit_recs:
+            if isinstance(item, dict):
+                recs.append({
+                    "title": item.get("title", ""),
+                    "url": item.get("url", "#")
+                })
+            elif isinstance(item, str):
+                recs.append({
+                    "title": item,
+                    "url": "#"
+                })
+
+    # 2. If no explicit recommendations, automatically scan siblings
+    if not recs and input_dir:
+        content_root = None
+        curr_dir = os.path.abspath(input_dir)
+        for _ in range(5):
+            if os.path.basename(curr_dir) == 'my-articles-md':
+                content_root = curr_dir
+                break
+            if os.path.basename(curr_dir) == 'danke':
+                t_path = os.path.join(curr_dir, 'my-articles-md')
+                if os.path.exists(t_path):
+                    content_root = t_path
+                    break
+            # check sibling/child directories
+            t_path = os.path.join(curr_dir, 'content', 'danke', 'my-articles-md')
+            if os.path.exists(t_path):
+                content_root = t_path
+                break
+            parent = os.path.dirname(curr_dir)
+            if parent == curr_dir:
+                break
+            curr_dir = parent
+
+        if not content_root:
+            content_root = os.path.dirname(os.path.abspath(input_dir))
+
+        all_articles = []
+        if os.path.exists(content_root):
+            for root, dirs, files in os.walk(content_root):
+                dirs[:] = [d for d in dirs if not d.startswith('.') and d not in ('venv', 'node_modules', 'scripts')]
+                for file in files:
+                    if file.endswith('.md') and not file.endswith(('_wechat.html', '_preview.html')):
+                        full_path = os.path.join(root, file)
+                        try:
+                            with open(full_path, 'r', encoding='utf-8') as f:
+                                file_content = f.read()
+                            _, file_meta = extract_frontmatter(file_content)
+                            if file_meta and file_meta.get('title'):
+                                title = file_meta.get('title')
+                                if title == metadata.get('title'):
+                                    continue
+                                all_articles.append({
+                                    "title": title,
+                                    "path": full_path,
+                                    "date": file_meta.get('date', '')
+                                })
+                        except Exception:
+                            pass
+
+        # Sort: sibling files in the same directory/subcategory first
+        sibling_recs = []
+        other_recs = []
+        for art in all_articles:
+            art_dir = os.path.dirname(art["path"])
+            if os.path.dirname(art_dir) == os.path.dirname(os.path.abspath(input_dir)) or art_dir == os.path.abspath(input_dir):
+                sibling_recs.append(art)
+            else:
+                other_recs.append(art)
+
+        # Sort by date (descending)
+        sibling_recs.sort(key=lambda x: str(x.get('date') or ''), reverse=True)
+        other_recs.sort(key=lambda x: str(x.get('date') or ''), reverse=True)
+
+        selected = sibling_recs[:3]
+        if len(selected) < 3:
+            selected += other_recs[:3 - len(selected)]
+
+        recs = [{"title": x["title"], "url": "#"} for x in selected[:3]]
+
+    if not recs:
+        return None
+
+    # 3. Build the beautiful WeChat HTML block
+    # Get primary brand color (default to red highlight color #ff4d4f)
+    brand_color = "#ff4d4f"
+
+    rec_div = soup.new_tag('div')
+    rec_div['style'] = (
+        f"margin: 30px 8px 20px 8px; "
+        f"padding: 16px 20px; "
+        f"background-color: #f8fafc; "
+        f"border-left: 5px solid {brand_color}; "
+        f"border-radius: 4px 8px 8px 4px; "
+        f"box-shadow: 0 2px 8px rgba(0,0,0,0.03); "
+        f"box-sizing: border-box;"
+    )
+
+    title_div = soup.new_tag('div')
+    title_div['style'] = (
+        "font-weight: bold; "
+        "color: #1e293b; "
+        "font-size: 15px; "
+        "display: flex; "
+        "align-items: center; "
+        "margin-bottom: 12px; "
+        "letter-spacing: 0.5px;"
+    )
+
+    emoji_span = soup.new_tag('span')
+    emoji_span['style'] = "margin-right: 8px; font-size: 16px;"
+    emoji_span.string = "🌟"
+    title_div.append(emoji_span)
+
+    text_span = soup.new_tag('span')
+    text_span.string = "往期精彩推荐"
+    title_div.append(text_span)
+
+    rec_div.append(title_div)
+
+    ul_tag = soup.new_tag('ul')
+    ul_tag['style'] = "list-style: none; margin: 0; padding: 0; line-height: 1.8;"
+
+    for item in recs:
+        li_tag = soup.new_tag('li')
+        li_tag['style'] = "margin: 8px 0; font-size: 14px; display: flex; align-items: flex-start;"
+
+        arrow_span = soup.new_tag('span')
+        arrow_span['style'] = f"color: {brand_color}; margin-right: 8px; font-size: 12px; line-height: 20px;"
+        arrow_span.string = "👉"
+        li_tag.append(arrow_span)
+
+        a_tag = soup.new_tag('a')
+        a_tag['href'] = item['url']
+        a_tag['target'] = "_blank"
+        a_tag['style'] = f"color: {brand_color}; text-decoration: none; font-weight: bold; line-height: 20px; word-break: break-all;"
+        a_tag.string = item['title']
+
+        li_tag.append(a_tag)
+        ul_tag.append(li_tag)
+
+    rec_div.append(ul_tag)
+    return rec_div
+
+
+def replace_recommendations_placeholder(soup, project_config, input_dir, metadata):
+    """
+    Finds placeholder texts like {{往期推荐}} or {{往期精彩推荐}} and replaces them in-place with the section.
+    """
+    target_node = None
+    placeholder_text = None
+    for text_node in soup.find_all(string=True):
+        if "{{往期推荐}}" in text_node:
+            target_node = text_node
+            placeholder_text = "{{往期推荐}}"
+            break
+        elif "{{往期精彩推荐}}" in text_node:
+            target_node = text_node
+            placeholder_text = "{{往期精彩推荐}}"
+            break
+
+    if not target_node:
+        return
+
+    rec_div = build_recommendations_section(soup, project_config, input_dir, metadata)
+    if not rec_div:
+        # Just clean up the placeholder
+        parent = target_node.parent
+        target_node.extract()
+        if parent and not parent.get_text().strip() and parent.name in ('p', 'div'):
+            parent.extract()
+        return
+
+    parent = target_node.parent
+    if parent and parent.name in ('p', 'div') and len(parent.get_text().strip()) == len(placeholder_text):
+        parent.replace_with(rec_div)
+    else:
+        target_node.replace_with(rec_div)
+
+
+def build_qrcode_section(soup, project_config, input_dir, metadata):
+    """
+    Builds a beautiful centered QR code section tag.
+    """
+    import urllib.parse
+    
+    qrcode_image = metadata.get('qrcode_image')
+    qrcode_url = metadata.get('qrcode_url')
+    
+    if qrcode_image:
+        if qrcode_image.startswith('img://'):
+            from .compiler import ImageResolver
+            resolver = ImageResolver(project_config, input_dir=input_dir)
+            qr_src = resolver.resolve_image_src(qrcode_image)
+        else:
+            qr_src = qrcode_image
+    elif qrcode_url:
+        # Generate custom QR code using online API
+        encoded_url = urllib.parse.quote(qrcode_url, safe='')
+        api_url = f"https://api.qrserver.com/v1/create-qr-code/?size=180x180&data={encoded_url}"
+        
+        # Download locally to avoid WeChat remote download issues
+        try:
+            import urllib.request
+            import tempfile
+            out_dir = input_dir or tempfile.gettempdir()
+            temp_path = os.path.join(out_dir, "_qrcode_temp.png")
+            req = urllib.request.Request(
+                api_url, 
+                headers={'User-Agent': 'Mozilla/5.0'}
+            )
+            with urllib.request.urlopen(req, timeout=5) as response:
+                with open(temp_path, 'wb') as f:
+                    f.write(response.read())
+            qr_src = temp_path if not input_dir else "_qrcode_temp.png"
+        except Exception as e:
+            print(f"Warning: Failed to generate and download QR code: {e}")
+            qr_src = api_url
+    else:
+        # Default fallback: Use the static QR code of the Official Account
+        from .compiler import ImageResolver
+        resolver = ImageResolver(project_config, input_dir=input_dir)
+        qr_src = resolver.resolve_image_src("img://二维码")
+
+    # Get author name for display (default to 弹壳呱呱)
+    author_name = metadata.get('author') or project_config.get('author') or "弹壳呱呱"
+    
+    # 2. Build the HTML block
+    qr_div = soup.new_tag('div')
+    qr_div['style'] = (
+        "margin: 30px auto 20px auto; "
+        "max-width: 360px; "
+        "padding: 24px 20px; "
+        "background-color: #f8fafc; "
+        "border: 1px dashed #e2e8f0; "
+        "border-radius: 12px; "
+        "text-align: center; "
+        "box-sizing: border-box;"
+    )
+
+    # Title
+    title_div = soup.new_tag('div')
+    title_div['style'] = (
+        "font-weight: bold; "
+        "color: #1e293b; "
+        "font-size: 16px; "
+        "margin-bottom: 4px; "
+        "letter-spacing: 0.5px;"
+    )
+    title_div.string = "扫码获取更多精彩"
+    qr_div.append(title_div)
+
+    # Subtitle
+    subtitle_div = soup.new_tag('div')
+    subtitle_div['style'] = (
+        "font-size: 13px; "
+        "color: #64748b; "
+        "margin-bottom: 20px;"
+    )
+    subtitle_div.string = "最新活动 · 特工 · 配件 · 宠物攻略"
+    qr_div.append(subtitle_div)
+
+    # QR Code Wrap
+    wrap_div = soup.new_tag('div')
+    wrap_div['style'] = (
+        "display: inline-block; "
+        "padding: 8px; "
+        "background: #ffffff; "
+        "border: 1px solid #e2e8f0; "
+        "border-radius: 8px; "
+        "box-shadow: 0 4px 12px rgba(0,0,0,0.05); "
+        "margin-bottom: 16px;"
+    )
+    
+    img_tag = soup.new_tag('img')
+    img_tag['src'] = qr_src
+    img_tag['style'] = "width: 180px; height: 180px; display: block; object-fit: contain;"
+    img_tag['alt'] = "二维码"
+    wrap_div.append(img_tag)
+    qr_div.append(wrap_div)
+
+    # Footer
+    footer_div = soup.new_tag('div')
+    footer_div['style'] = (
+        "font-size: 12px; "
+        "color: #94a3b8; "
+        "letter-spacing: 1px;"
+    )
+    footer_div.string = f"长按识别二维码关注「{author_name}」"
+    qr_div.append(footer_div)
+
+    return qr_div
+
+
+def replace_qrcode_placeholder(soup, project_config, input_dir, metadata):
+    """
+    Finds placeholder {{扫码获取更多精彩}} and replaces it in-place with the QR code section.
+    """
+    target_node = None
+    placeholder_text = None
+    for text_node in soup.find_all(string=True):
+        if "{{扫码获取更多精彩}}" in text_node:
+            target_node = text_node
+            placeholder_text = "{{扫码获取更多精彩}}"
+            break
+
+    if not target_node:
+        return
+
+    qr_div = build_qrcode_section(soup, project_config, input_dir, metadata)
+    if not qr_div:
+        # Cleanup placeholder
+        parent = target_node.parent
+        target_node.extract()
+        if parent and not parent.get_text().strip() and parent.name in ('p', 'div'):
+            parent.extract()
+        return
+
+    parent = target_node.parent
+    if parent and parent.name in ('p', 'div') and len(parent.get_text().strip()) == len(placeholder_text):
+        parent.replace_with(qr_div)
+    else:
+        target_node.replace_with(qr_div)
+
+
 def convert_to_wechat_html(md_content, project_config, input_dir=None):
     """
     Converts Markdown content to HTML with inline CSS styles optimized for WeChat.
@@ -658,60 +1057,13 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
         if is_star_list_item:
             continue
             
-        target = li
-        p_tag = li.find('p')
-        if p_tag:
-            target = p_tag
-            
-        bold_colon_fixed = False
-        for strong in target.find_all('strong'):
-            siblings_to_move = []
-            curr = strong.next_sibling
-            colon_found = False
-            colon_part = None
-            remaining_text = None
-            
-            while curr:
-                if getattr(curr, 'name', None) in ('strong', 'br', 'p', 'div', 'section', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'td', 'tr', 'table'):
-                    break
-                elif not getattr(curr, 'name', None) and isinstance(curr, str):
-                    curr_text = str(curr)
-                    m = re.match(r'^(\s*[:：]\s*)', curr_text)
-                    if m:
-                        colon_part = m.group(1)
-                        remaining_text = curr_text[len(colon_part):]
-                        colon_found = True
-                        break
-                    else:
-                        break
-                else:
-                    siblings_to_move.append(curr)
-                curr = curr.next_sibling
-                
-            if colon_found:
-                for sib in siblings_to_move:
-                    strong.append(sib)
-                strong.append(soup.new_string(colon_part))
-                if curr:
-                    if remaining_text:
-                        curr.replace_with(soup.new_string(remaining_text))
-                    else:
-                        curr.extract()
-                
-                existing_style = strong.get('style', '').strip()
-                nowrap_rule = "white-space: nowrap !important;"
-                if existing_style:
-                    if not existing_style.endswith(';'):
-                        existing_style += ';'
-                    strong['style'] = existing_style + " " + nowrap_rule
-                else:
-                    strong['style'] = nowrap_rule
-                bold_colon_fixed = True
+        target = li.find('p') or li
+        fix_strong_colon_wrapping(soup, target)
         
-        if bold_colon_fixed:
+        # Check if already handled via strong tags
+        if target.find('strong'):
             continue
             
-        text = target.get_text()
         colon_match = re.search(r'[:：]', text)
         if not colon_match:
             continue
@@ -768,6 +1120,12 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
             for node in remaining_nodes:
                 target.append(node)
 
+    # Prevent line breaks around colons in regular paragraphs
+    for p in soup.find_all('p'):
+        # Only process top-level paragraphs that are not children of list items
+        if not p.find_parent('li'):
+            fix_strong_colon_wrapping(soup, p)
+
     # Prevent line breaks around the first colon in table cells (e.g. "盾伤: ...")
     for td in soup.find_all('td'):
         td_style = td.get('style', '')
@@ -784,52 +1142,10 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
             continue
             
         # First, try optimization: if td contains strong tags, pull subsequent inline elements and colons inside
-        bold_colon_fixed = False
-        for strong in td.find_all('strong'):
-            siblings_to_move = []
-            curr = strong.next_sibling
-            colon_found = False
-            colon_part = None
-            remaining_text = None
-            
-            while curr:
-                if getattr(curr, 'name', None) in ('strong', 'br', 'p', 'div', 'section', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'td', 'tr', 'table'):
-                    break
-                elif not getattr(curr, 'name', None) and isinstance(curr, str):
-                    curr_text = str(curr)
-                    m = re.match(r'^(\s*[:：]\s*)', curr_text)
-                    if m:
-                        colon_part = m.group(1)
-                        remaining_text = curr_text[len(colon_part):]
-                        colon_found = True
-                        break
-                    else:
-                        break
-                else:
-                    siblings_to_move.append(curr)
-                curr = curr.next_sibling
-                
-            if colon_found:
-                for sib in siblings_to_move:
-                    strong.append(sib)
-                strong.append(soup.new_string(colon_part))
-                if curr:
-                    if remaining_text:
-                        curr.replace_with(soup.new_string(remaining_text))
-                    else:
-                        curr.extract()
-                
-                existing_style = strong.get('style', '').strip()
-                nowrap_rule = "white-space: nowrap !important;"
-                if existing_style:
-                    if not existing_style.endswith(';'):
-                        existing_style += ';'
-                    strong['style'] = existing_style + " " + nowrap_rule
-                else:
-                    strong['style'] = nowrap_rule
-                bold_colon_fixed = True
-                
-        if bold_colon_fixed:
+        fix_strong_colon_wrapping(soup, td)
+        
+        # Check if already handled via strong tags
+        if td.find('strong'):
             continue
             
         children = list(td.contents)
@@ -887,6 +1203,12 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
             td.append(span_tag)
             for node in remaining_nodes:
                 td.append(node)
+
+    # Replace recommendations placeholder in-place with the section if present
+    replace_recommendations_placeholder(soup, project_config, input_dir, metadata)
+
+    # Replace QR code placeholder in-place with the section if present
+    replace_qrcode_placeholder(soup, project_config, input_dir, metadata)
 
     final_html = str(soup)
 

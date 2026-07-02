@@ -24,11 +24,15 @@ class TestWeChatCompiler(unittest.TestCase):
     def test_numerical_highlighting(self):
         """Verify status values like +5% and +3s are highlighted in red strong font tags when rules are applied directly."""
         from engine.highlight import apply_highlight_rules, load_highlight_rules
-        md = "暴击率+5%\n幽灵状态时间上限+3s"
+        md = "暴击率+5%\n幽灵状态时间上限+3s\n升满 +2000攻击\n最终攻击 +2000\n+2000生命\n生命 +2000"
         rules = load_highlight_rules(self.project_config.get('highlight_rules_path'))
         res = apply_highlight_rules(md, rules)
         self.assertIn('<strong><font color="#FF4D4F">+5%</font></strong>', res)
         self.assertIn('<strong><font color="#FF4D4F">+3s</font></strong>', res)
+        self.assertIn('<strong><font color="#FF4D4F">+2000</font></strong>攻击', res)
+        self.assertIn('最终攻击<strong><font color="#FF4D4F"> +2000</font></strong>', res)
+        self.assertIn('<strong><font color="#FF4D4F">+2000</font></strong>生命', res)
+        self.assertIn('生命<strong><font color="#FF4D4F"> +2000</font></strong>', res)
 
     def test_highlight_nesting_prevention(self):
         """Verify that auto-highlighting is disabled by default in convert_to_wechat_html."""
@@ -194,6 +198,71 @@ class TestWeChatCompiler(unittest.TestCase):
         md = "暴击率+5%"
         self.assertNotIn("<font", preprocess_markdown(md, self.project_config))
         self.assertIn("<font", preprocess_markdown(md, self.project_config, enable_highlight=True))
+
+    def test_recommendations_section(self):
+        """Verify the '往期精彩推荐' section is generated from explicit metadata recommendations when placeholder is present."""
+        import re
+        md = "---\ntitle: 测试文章\nrecommendations:\n  - title: \"推荐文章一\"\n    url: \"https://mp.weixin.qq.com/s/1\"\n  - title: \"推荐文章二\"\n---\n文章主体内容。\n\n{{往期推荐}}"
+        html, _ = convert_to_wechat_html(md, self.project_config)
+        soup = BeautifulSoup(html, 'html.parser')
+        
+        # Check that the section exists
+        rec_title = soup.find(lambda tag: tag.name == 'div' and "往期精彩推荐" in tag.get_text())
+        self.assertIsNotNone(rec_title)
+        
+        # Verify recommended articles
+        a_tags = soup.find_all('a')
+        self.assertTrue(len(a_tags) >= 2)
+        self.assertEqual(a_tags[0].text, "推荐文章一")
+        self.assertEqual(a_tags[0]['href'], "https://mp.weixin.qq.com/s/1")
+        self.assertEqual(a_tags[1].text, "推荐文章二")
+        self.assertEqual(a_tags[1]['href'], "#")
+
+    def test_recommendations_not_inserted_without_placeholder(self):
+        """Verify that the recommendations section is NOT rendered when placeholder is absent."""
+        md = "---\ntitle: 测试文章\nrecommendations:\n  - title: \"推荐文章一\"\n    url: \"https://mp.weixin.qq.com/s/1\"\n---\n文章主体内容。"
+        html, _ = convert_to_wechat_html(md, self.project_config)
+        soup = BeautifulSoup(html, 'html.parser')
+        
+        rec_title = soup.find(lambda tag: tag.name == 'div' and "往期精彩推荐" in tag.get_text())
+        self.assertIsNone(rec_title)
+
+    def test_qrcode_generation_with_placeholder(self):
+        """Verify the QR code section is generated when the placeholder is present."""
+        md = "---\ntitle: 测试文章\nauthor: 弹壳小能手\nqrcode_url: \"https://example.com/follow\"\n---\n这里是内容。\n\n{{扫码获取更多精彩}}"
+        html, _ = convert_to_wechat_html(md, self.project_config)
+        soup = BeautifulSoup(html, 'html.parser')
+        
+        # Check title and footer text
+        qr_title = soup.find(lambda tag: tag.name == 'div' and "扫码获取更多精彩" in tag.get_text())
+        self.assertIsNotNone(qr_title)
+        
+        qr_footer = soup.find(lambda tag: tag.name == 'div' and "长按识别二维码关注「弹壳小能手」" in tag.get_text())
+        self.assertIsNotNone(qr_footer)
+        
+        # Verify the QR code image points to api.qrserver.com with the custom URL
+        img = soup.find('img', attrs={'alt': '二维码'})
+        self.assertIsNotNone(img)
+        self.assertTrue(img['src'].endswith("_qrcode_temp.png") or "api.qrserver.com" in img['src'])
+
+    def test_qrcode_not_inserted_without_placeholder(self):
+        """Verify that the QR code section is NOT rendered when placeholder is absent."""
+        md = "---\ntitle: 测试文章\nauthor: 弹壳小能手\n---\n这里是内容。"
+        html, _ = convert_to_wechat_html(md, self.project_config)
+        soup = BeautifulSoup(html, 'html.parser')
+        
+        qr_title = soup.find(lambda tag: tag.name == 'div' and "扫码获取更多精彩" in tag.get_text())
+        self.assertIsNone(qr_title)
+
+    def test_qrcode_default_static_image(self):
+        """Verify that QR code defaults to the static image provided by the user when no custom url/image is in frontmatter."""
+        md = "---\ntitle: 测试文章\nauthor: 弹壳小能手\n---\n这里是内容。\n\n{{扫码获取更多精彩}}"
+        html, _ = convert_to_wechat_html(md, self.project_config)
+        soup = BeautifulSoup(html, 'html.parser')
+        
+        img = soup.find('img', attrs={'alt': '二维码'})
+        self.assertIsNotNone(img)
+        self.assertIn("assets/img/其它/qrcode.png", img['src'])
 
 if __name__ == '__main__':
     unittest.main()
