@@ -175,6 +175,12 @@ def main():
     parser.add_argument("input_file", help="输入 Markdown 文件路径")
     parser.add_argument("--pack", help="内容包目录路径（如 packs/danke）")
     parser.add_argument("--theme", help="CSS 主题名称")
+    parser.add_argument(
+        "-y", "--yes", "--non-interactive",
+        dest="yes",
+        action="store_true",
+        help="运行非交互模式，无需用户确认直接完成所有阶段"
+    )
 
     args = parser.parse_args()
 
@@ -202,53 +208,62 @@ def main():
 
     # ==================== STAGE 1 ====================
     run_stage_1(input_path, stage1_path, highlight_rules_path, image_mapping_path)
-    while True:
-        ans = input(
-            f"\n➡️ [Stage 1] 文本高亮整理完成！文件已保存至:\n   {stage1_path}\n"
-            "   (您可以在编辑器中打开该文件进行审查与修改)\n"
-            "   请输入操作: [y] 继续至 Stage 2 | [r] 重新加载源文件重跑 Stage 1 | [q] 退出: "
-        ).strip().lower()
-        if ans in ('', 'y', 'yes'):
-            break
-        elif ans == 'r':
-            run_stage_1(input_path, stage1_path, highlight_rules_path, image_mapping_path)
-        elif ans == 'q':
-            print("👋 已退出流程")
-            sys.exit(0)
+    if not args.yes:
+        while True:
+            ans = input(
+                f"\n➡️ [Stage 1] 文本高亮整理完成！文件已保存至:\n   {stage1_path}\n"
+                "   (您可以在编辑器中打开该文件进行审查与修改)\n"
+                "   请输入操作: [y] 继续至 Stage 2 | [r] 重新加载源文件重跑 Stage 1 | [q] 退出: "
+            ).strip().lower()
+            if ans in ('', 'y', 'yes'):
+                break
+            elif ans == 'r':
+                run_stage_1(input_path, stage1_path, highlight_rules_path, image_mapping_path)
+            elif ans == 'q':
+                print("👋 已退出流程")
+                sys.exit(0)
+    else:
+        print(f"\n➡️ [Stage 1] 文本高亮整理完成！文件已保存至:\n   {stage1_path}")
 
     # ==================== STAGE 2 ====================
     # Read from stage1_path to preserve manual edits
     run_stage_2(stage1_path, stage2_path, image_mapping_path)
-    while True:
-        ans = input(
-            f"\n➡️ [Stage 2] 智能配图与样式注入完成！文件已保存至:\n   {stage2_path}\n"
-            "   (您可以在编辑器中打开该文件进行审查与修改)\n"
-            "   请输入操作: [y] 继续至 Stage 3 | [r] 重新加载 Stage 1 文件重跑 Stage 2 | [q] 退出: "
-        ).strip().lower()
-        if ans in ('', 'y', 'yes'):
-            break
-        elif ans == 'r':
-            run_stage_2(stage1_path, stage2_path, image_mapping_path)
-        elif ans == 'q':
-            print("👋 已退出流程")
-            sys.exit(0)
+    if not args.yes:
+        while True:
+            ans = input(
+                f"\n➡️ [Stage 2] 智能配图与样式注入完成！文件已保存至:\n   {stage2_path}\n"
+                "   (您可以在编辑器中打开该文件进行审查与修改)\n"
+                "   请输入操作: [y] 继续至 Stage 3 | [r] 重新加载 Stage 1 文件重跑 Stage 2 | [q] 退出: "
+            ).strip().lower()
+            if ans in ('', 'y', 'yes'):
+                break
+            elif ans == 'r':
+                run_stage_2(stage1_path, stage2_path, image_mapping_path)
+            elif ans == 'q':
+                print("👋 已退出流程")
+                sys.exit(0)
+    else:
+        print(f"\n➡️ [Stage 2] 智能配图与样式注入完成！文件已保存至:\n   {stage2_path}")
 
     # ==================== STAGE 3 ====================
     # Read from stage2_path to preserve manual edits
     run_stage_3(stage2_path, stage3_path, project_config)
-    while True:
-        ans = input(
-            f"\n➡️ [Stage 3] 微信 HTML 编译完成！文件已保存至:\n   {stage3_path}\n"
-            "   (您可以在浏览器或编辑器中查看和编辑生成的 HTML 效果)\n"
-            "   请输入操作: [y] 继续至 Stage 4 (发布公众号) | [r] 重新加载 Stage 2 文件重跑 Stage 3 | [q] 退出: "
-        ).strip().lower()
-        if ans in ('', 'y', 'yes'):
-            break
-        elif ans == 'r':
-            run_stage_3(stage2_path, stage3_path, project_config)
-        elif ans == 'q':
-            print("👋 已退出流程")
-            sys.exit(0)
+    if not args.yes:
+        while True:
+            ans = input(
+                f"\n➡️ [Stage 3] 微信 HTML 编译完成！文件已保存至:\n   {stage3_path}\n"
+                "   (您可以在浏览器或编辑器中查看和编辑生成的 HTML 效果)\n"
+                "   请输入操作: [y] 继续至 Stage 4 (发布公众号) | [r] 重新加载 Stage 2 文件重跑 Stage 3 | [q] 退出: "
+            ).strip().lower()
+            if ans in ('', 'y', 'yes'):
+                break
+            elif ans == 'r':
+                run_stage_3(stage2_path, stage3_path, project_config)
+            elif ans == 'q':
+                print("👋 已退出流程")
+                sys.exit(0)
+    else:
+        print(f"\n➡️ [Stage 3] 微信 HTML 编译完成！文件已保存至:\n   {stage3_path}")
 
     # ==================== STAGE 4 ====================
     print("\n🚀 [Stage 4/4] 正在调用发布程序发布至公众号草稿箱...")
@@ -278,6 +293,9 @@ def main():
     appid = os.environ.get('WECHAT_APPID') or config.get('appid')
     appsecret = os.environ.get('WECHAT_APPSECRET') or config.get('appsecret')
     if not appid or not appsecret:
+        if args.yes:
+            print("❌ Error: WeChat credentials (appid, appsecret) are not configured in scripts/config.json or environment variables.")
+            sys.exit(1)
         appid, appsecret = setup_interactive_config()
     publish_draft(
         content_path=stage3_path,
