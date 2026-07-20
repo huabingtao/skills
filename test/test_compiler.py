@@ -264,5 +264,17 @@ class TestWeChatCompiler(unittest.TestCase):
         self.assertIsNotNone(img)
         self.assertIn("assets/img/其它/qrcode.png", img['src'])
 
+    def test_unordered_list_normalization(self):
+        """Verify that unordered lists starting with '*' or '+' are normalized to '-' during preprocess."""
+        md = "* 列表项一\n  + 列表项二\n- 列表项三\n* 列表项四：包含冒号\n  * 嵌套列表项"
+        normalized = preprocess_markdown(md, self.project_config)
+        self.assertIn("- 列表项一", normalized)
+        self.assertIn("  - 列表项二", normalized)
+        self.assertIn("- 列表项三", normalized)
+        self.assertIn("- 列表项四：包含冒号", normalized)
+        self.assertIn("  - 嵌套列表项", normalized)
+        self.assertNotIn("* 列表项一", normalized)
+        self.assertNotIn("+ 列表项二", normalized)
+
 if __name__ == '__main__':
     unittest.main()

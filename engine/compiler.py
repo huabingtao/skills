@@ -154,6 +154,9 @@ def preprocess_markdown(md_content, project_config=None, enable_highlight=None):
     if enable_highlight is None:
         enable_highlight = bool(project_config.get("enable_highlight", False))
 
+    # 强制将无序列表（以 * 或 + 开头的项）的前缀统一规范化为减号 -
+    md_content = re.sub(r'^([ \t]*)[*+](\s+)', r'\1-\2', md_content, flags=re.MULTILINE)
+
     md_content = re.sub(r'^[ \t]*[*+-]\s*$\n?', '', md_content, flags=re.MULTILINE)
     md_content = re.sub(r'^[ \t]*\d+\.\s*$\n?', '', md_content, flags=re.MULTILINE)
     md_content = re.sub(r'(^[ \t]*[*+-]\s+[^\n]+)\n[ \t]*[:：]\s*', r'\1：', md_content, flags=re.MULTILINE)
