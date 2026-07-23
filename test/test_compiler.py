@@ -63,6 +63,14 @@ class TestWeChatCompiler(unittest.TestCase):
         style_pct = img_pct.get('style', '')
         self.assertIn("width: 60%", style_pct)
 
+        # Test width=50% syntax
+        md_width50 = "![截图](img://截图){width=50%}"
+        html_width50, _ = convert_to_wechat_html(md_width50, self.project_config)
+        soup_width50 = BeautifulSoup(html_width50, 'html.parser')
+        img_width50 = soup_width50.find('img')
+        style_width50 = img_width50.get('style', '')
+        self.assertIn("width: 50%", style_width50)
+
         # Test center layout with custom pixel width (no unit -> automatically appends px)
         md_px = "![等离子剑](img://等离子剑){type=center;w=250}"
         html_px, _ = convert_to_wechat_html(md_px, self.project_config)
@@ -86,6 +94,38 @@ class TestWeChatCompiler(unittest.TestCase):
         # Verify banner style
         self.assertIn("width: 100%", imgs[1].get('style', ''))
         self.assertIn("border-radius: 8px", imgs[1].get('style', ''))
+
+    def test_image_caption(self):
+        """Verify image captions are correctly wrapped and styled."""
+        md_single = "![等离子剑](img://等离子剑){type=banner; caption=神器外观说明}"
+        html_single, _ = convert_to_wechat_html(md_single, self.project_config)
+        soup_single = BeautifulSoup(html_single, 'html.parser')
+        
+        wrapper = soup_single.find('section', class_='img-caption-wrapper')
+        self.assertIsNotNone(wrapper)
+        caption_node = soup_single.find('section', class_='img-caption')
+        self.assertIsNotNone(caption_node)
+        self.assertEqual(caption_node.get_text().strip(), "神器外观说明")
+        self.assertIn("color: #888888", caption_node.get('style', ''))
+        self.assertIn("font-size: 12px", caption_node.get('style', ''))
+        self.assertIn("text-align: center", caption_node.get('style', ''))
+
+        # Test grid images with captions
+        md_grid = "![等离子剑](img://等离子剑){type=grid2; caption=\"兑换碎片A\"}\n![追光者](img://追光者){type=grid2; caption=\"兑换碎片B\"}"
+        html_grid, _ = convert_to_wechat_html(md_grid, self.project_config)
+        soup_grid = BeautifulSoup(html_grid, 'html.parser')
+        
+        wrappers = soup_grid.find_all('section', class_='img-caption-wrapper')
+        self.assertEqual(len(wrappers), 2)
+        for w in wrappers:
+            self.assertIn("width: 48%", w.get('style', ''))
+            self.assertIn("display: inline-block", w.get('style', ''))
+            self.assertIn("vertical-align: top", w.get('style', ''))
+        
+        captions = soup_grid.find_all('section', class_='img-caption')
+        self.assertEqual(len(captions), 2)
+        self.assertEqual(captions[0].get_text().strip(), "兑换碎片A")
+        self.assertEqual(captions[1].get_text().strip(), "兑换碎片B")
 
     def test_list_colon_nowrap(self):
         """Verify list item keys and colons are wrapped in nowrap font tags."""

@@ -73,24 +73,28 @@ def apply_css_theme(soup, theme_path):
         print("⚠ Warning: Error applying CSS theme: " + str(e))
 
 
-def apply_image_node_styles(img, params):
+def apply_image_node_styles(img, params, soup=None):
     """
-    Applies style presets based on params.
+    Applies style presets based on params. Handles caption wrapper generation if caption present.
     """
     inline_style = ""
     img_type = params.get('type')
+    width_val = params.get('w') or params.get('width')
+    height_val = params.get('h') or params.get('height')
+    caption_text = params.get('caption')
+
     if img_type == 'card':
         inline_style = "display: block; margin: 20px auto; width: 90%; max-width: 100%; border-radius: 12px; box-shadow: 0 10px 20px rgba(0,0,0,0.1); border: 1px solid #eee;"
     elif img_type == 'center':
-        width_val = params.get('w', 'auto')
-        if width_val.isdigit():
-            width_val += 'px'
-        inline_style = "display: block; margin: 20px auto; width: " + str(width_val) + "; max-width: 100%;"
-        if 'h' in params:
-            h_val = params['h']
-            if h_val.isdigit():
-                h_val += 'px'
-            inline_style += " height: " + str(h_val) + ";"
+        w_str = width_val or 'auto'
+        if w_str.isdigit():
+            w_str += 'px'
+        inline_style = "display: block; margin: 20px auto; width: " + str(w_str) + "; max-width: 100%;"
+        if height_val:
+            h_str = height_val
+            if h_str.isdigit():
+                h_str += 'px'
+            inline_style += " height: " + str(h_str) + ";"
     elif img_type == 'banner':
         inline_style = "display: block; margin: 20px auto; width: 100%; max-width: 100%; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.08);"
     elif img_type == 'grid2':
@@ -108,22 +112,47 @@ def apply_image_node_styles(img, params):
     elif img_type == 'icon' or params.get('icon') == 'card':
         inline_style = "width: 24px; height: 24px; vertical-align: middle; display: inline-block; margin: -2px 4px 0 4px; object-fit: cover;"
     else:
-        if 'w' in params:
-            inline_style += "width: " + str(params['w']) + "; "
-        if 'h' in params:
-            inline_style += "height: " + str(params['h']) + "; "
-            
+        if width_val:
+            w_str = width_val + "px" if width_val.isdigit() else width_val
+            inline_style += "width: " + str(w_str) + "; display: block; margin: 10px auto; max-width: 100%; "
+        if height_val:
+            h_str = height_val + "px" if height_val.isdigit() else height_val
+            inline_style += "height: " + str(h_str) + "; "
+
     if 'pd' in params:
         inline_style += "padding: " + str(params['pd']) + "px; box-sizing: border-box; "
 
-    if inline_style:
-        existing_style = img.get('style', '').strip()
-        if existing_style:
-            if not existing_style.endswith(';'):
-                existing_style += ';'
-            img['style'] = existing_style + " " + inline_style
+    if caption_text and soup:
+        wrapper = soup.new_tag('section')
+        wrapper['class'] = 'img-caption-wrapper'
+        
+        if img_type in ('grid2', 'grid3', 'grid4'):
+            wrapper['style'] = inline_style + " vertical-align: top; text-align: center;"
+            img['style'] = "display: block; width: 100%; height: auto; max-width: 100%; border-radius: inherit;"
+        elif img_type in ('banner', 'card', 'center'):
+            wrapper['style'] = inline_style + " text-align: center;"
+            img['style'] = "display: block; width: 100%; height: auto; max-width: 100%; margin: 0 auto;"
         else:
-            img['style'] = inline_style
+            wrapper['style'] = (inline_style if inline_style else "display: block; margin: 10px auto; max-width: 100%;") + " text-align: center;"
+            img['style'] = "display: block; width: 100%; height: auto; max-width: 100%; margin: 0 auto;"
+
+        caption_node = soup.new_tag('section')
+        caption_node['class'] = 'img-caption'
+        caption_node['style'] = "display: block; width: 100%; margin-top: 6px; font-size: 12px; color: #888888; text-align: center; line-height: 1.4; word-break: break-all; box-sizing: border-box;"
+        caption_node.string = caption_text
+
+        img.replace_with(wrapper)
+        wrapper.append(img)
+        wrapper.append(caption_node)
+    else:
+        if inline_style:
+            existing_style = img.get('style', '').strip()
+            if existing_style:
+                if not existing_style.endswith(';'):
+                    existing_style += ';'
+                img['style'] = existing_style + " " + inline_style
+            else:
+                img['style'] = inline_style
 
 
 def extract_frontmatter(md_content):
@@ -324,10 +353,34 @@ def resolve_image_src(src, resolver_context):
 
 def parse_image_params(params_str):
     params = {}
-    for p in params_str.split(';'):
-        if '=' in p:
-            k, v = p.split('=', 1)
-            params[k.strip()] = v.strip()
+    if not params_str:
+        return params
+    
+    # 提取 key=value 或 key:value 组合（支持双引号、单引号或无引号值，支持中文字符与空格）
+    pattern = r'([\w\-]+)\s*[:=]\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s;,}]+))'
+    matches = re.findall(pattern, params_str)
+    for match in matches:
+        key = match[0].strip()
+        val = match[1] if match[1] != '' else (match[2] if match[2] != '' else match[3])
+        params[key] = val.strip()
+
+    # 如果无 k-v，支持形如 {50%} 或 {300px} 的直接宽度写法
+    if not params and params_str.strip():
+        val = params_str.strip().strip('{}')
+        if val.endswith('%') or val.endswith('px') or val.isdigit():
+            params['w'] = val
+            params['width'] = val
+
+    # 别名无缝互映射: width <-> w, height <-> h
+    if 'width' in params and 'w' not in params:
+        params['w'] = params['width']
+    if 'w' in params and 'width' not in params:
+        params['width'] = params['w']
+    if 'height' in params and 'h' not in params:
+        params['h'] = params['height']
+    if 'h' in params and 'height' not in params:
+        params['height'] = params['h']
+
     return params
 
 
@@ -335,14 +388,14 @@ def process_soup_images(soup, resolver):
     """
     Applies custom image styles, cleans width/height attrs, and resolves sources.
     """
-    for img in soup.find_all('img'):
+    for img in list(soup.find_all('img')):
         sibling = img.next_sibling
         if sibling and isinstance(sibling, str):
             stripped_sibling = sibling.lstrip()
             if stripped_sibling.startswith('{'):
                 match = re.match(r'^\{(.*?)\}', stripped_sibling)
                 if match:
-                    apply_image_node_styles(img, parse_image_params(match.group(1)))
+                    apply_image_node_styles(img, parse_image_params(match.group(1)), soup=soup)
                     rest = stripped_sibling[match.end():]
                     orig_space = sibling[:len(sibling) - len(stripped_sibling)]
                     sibling.replace_with(orig_space + rest)
@@ -373,11 +426,11 @@ def process_soup_images(soup, resolver):
         if src and not src.startswith(('http://', 'https://')):
             img['src'] = resolver.resolve_image_src(src)
 
-    # Clean up <br/> tags between consecutive inline-block/grid images
+    # Clean up <br/> tags between consecutive inline-block/grid images or wrappers
     for br in list(soup.find_all('br')):
         prev_node = br.find_previous_sibling()
         next_node = br.find_next_sibling()
-        if prev_node and prev_node.name == 'img' and next_node and next_node.name == 'img':
+        if prev_node and next_node:
             prev_style = prev_node.get('style', '')
             next_style = next_node.get('style', '')
             if 'inline-block' in prev_style and 'inline-block' in next_style:
@@ -617,10 +670,10 @@ def translate_params_to_pandoc(params_str):
         if img_type == 'icon' or params.get('icon') == 'card':
             width_val, height_val = '24px', '24px'
         else:
-            w = params.get('w')
+            w = params.get('w') or params.get('width')
             if w:
                 width_val = w + 'px' if w.isdigit() else w
-            h = params.get('h')
+            h = params.get('h') or params.get('height')
             if h:
                 height_val = h + 'px' if h.isdigit() else h
     elif img_type in ('avatar', 'acatar'):
@@ -639,10 +692,10 @@ def translate_params_to_pandoc(params_str):
     elif img_type == 'grid4':
         width_val = '23%'
     else:
-        w = params.get('w')
+        w = params.get('w') or params.get('width')
         if w:
             width_val = w + 'px' if w.isdigit() else w
-        h = params.get('h')
+        h = params.get('h') or params.get('height')
         if h:
             height_val = h + 'px' if h.isdigit() else h
 

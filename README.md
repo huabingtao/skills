@@ -40,6 +40,14 @@
 共鸣伤害![共鸣伤害](img://共鸣伤害){type=icon}：提升助战位共鸣伤害。
 ```
 
+### 3.6 图片下方说明文字 (Caption)
+支持通过 `{caption=说明文字}` 为任意图片添加下方居中小字说明（12px 灰色 `#888888`）。完美兼容单图（`banner`/`card`/`center`）及 `grid2`/`grid4` 等多图并排网格：
+```markdown
+![活动海报](img://海报){type=banner; caption=活动主界面预览}
+![末世战马](img://末世战马){type=grid2; caption=兑换末世战马碎片}
+![SP特工](img://SP特工){type=grid2; caption="兑换 SP 特工万能碎片"}
+```
+
 ### 4. 微信公众号富文本适配与自动化发布 (WeChat HTML & Publisher)
 项目配备了格式转换与一键发布工具集：
 - **CSS 主题解耦**：支持通过 `--theme` 参数加载 `themes/{theme_name}.css` 中的标准 CSS，不再硬编码，极大地方便了排版样式的定制和扩展。
