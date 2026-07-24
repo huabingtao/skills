@@ -482,6 +482,28 @@ def append_external_link_footnotes(soup):
         soup.append(p)
 
 
+def apply_nowrap_to_tag(tag, display_inline=True):
+    """
+    Applies white-space: nowrap !important and display: inline !important to tag without duplicating style rules.
+    """
+    existing_style = tag.get('style', '').strip()
+    rules = []
+    if existing_style:
+        for rule in existing_style.split(';'):
+            rule = rule.strip()
+            if not rule:
+                continue
+            lower_rule = rule.lower()
+            if lower_rule.startswith('display:') or lower_rule.startswith('white-space:'):
+                continue
+            rules.append(rule)
+            
+    if display_inline:
+        rules.append('display: inline !important')
+    rules.append('white-space: nowrap !important')
+    tag['style'] = '; '.join(rules)
+
+
 def fix_strong_colon_wrapping(soup, target):
     """
     Finds strong tags in target and pulls any trailing colons (and intervening inline elements)
@@ -521,14 +543,7 @@ def fix_strong_colon_wrapping(soup, target):
                 else:
                     curr.extract()
             # Mark the strong tag with nowrap inline style to protect it from line break
-            existing_style = strong.get('style', '').strip()
-            nowrap_rule = "display: inline-block !important; white-space: nowrap !important;"
-            if existing_style:
-                if not existing_style.endswith(';'):
-                    existing_style += ';'
-                strong['style'] = existing_style + " " + nowrap_rule
-            else:
-                strong['style'] = nowrap_rule
+            apply_nowrap_to_tag(strong, display_inline=True)
 
 
 def cleanup_list_text_nodes(soup):
@@ -570,9 +585,7 @@ def _move_colon_into_strong(soup, target):
             else:
                 curr.extract()
 
-        existing_style = strong.get('style', '').strip()
-        nowrap_rule = "white-space: nowrap !important;"
-        strong['style'] = (existing_style + (" " if existing_style.endswith(';') else "; ") + nowrap_rule) if existing_style else nowrap_rule
+        apply_nowrap_to_tag(strong, display_inline=True)
         return True
     return False
 
