@@ -128,7 +128,7 @@ class TestWeChatCompiler(unittest.TestCase):
         self.assertEqual(captions[1].get_text().strip(), "兑换碎片B")
 
     def test_list_colon_nowrap(self):
-        """Verify list item keys and colons are wrapped in nowrap font tags."""
+        """Verify list item strong tags are unwrapped to plain text to strictly prevent WeChat line breaks."""
         md = (
             "* **专属效果**：对应S级装备破坏者风衣。\n"
             "* 培养建议: 推荐拉到3[红星]\n"
@@ -139,31 +139,19 @@ class TestWeChatCompiler(unittest.TestCase):
         lis = soup.find_all('li')
         self.assertEqual(len(lis), 3)
 
-        # 1. First li has bold prefix and Chinese colon
-        # Expected: <strong style="...white-space: nowrap !important;">专属效果：</strong>对应S级装备破坏者风衣。
+        # 1. First li has bold prefix, which should be unwrapped to plain text without strong
         li1 = lis[0]
         strong1 = li1.find('strong')
-        self.assertIsNotNone(strong1)
-        self.assertIn("white-space: nowrap", strong1.get('style', ''))
-        self.assertEqual(strong1.text, "专属效果：")
-        self.assertNotIn("对应S级装备", strong1.text)
+        self.assertIsNone(strong1)
+        self.assertIn("专属效果：对应S级装备破坏者风衣。", li1.text)
 
-        # 2. Second li has no bold but English colon followed by space
-        # Expected: <span style="white-space: nowrap !important;">培养建议: </span>推荐拉到3[红星]
+        # 2. Second li has no bold
         li2 = lis[1]
-        span2 = li2.find('span')
-        self.assertIsNotNone(span2)
-        self.assertEqual(span2.get('style'), 'white-space: nowrap !important;')
-        self.assertEqual(span2.text, "培养建议: ")
-        self.assertNotIn("推荐拉到", span2.text)
+        self.assertIn("培养建议: 推荐拉到", li2.text)
 
-        # 3. Third li is a star list item, which should have style="white-space: nowrap !important;" on the <li> tag itself,
-        # and NOT have nested colon nowrap span wrapper (since we skipped it).
+        # 3. Third li is a star list item
         li3 = lis[2]
-        self.assertIn("white-space: nowrap", li3.get('style', ''))
-        # Ensure it doesn't have the nowrap span tag wrapping the colon
-        span3 = li3.find('span', attrs={'style': 'white-space: nowrap !important;'})
-        self.assertIsNone(span3)
+        self.assertIsNotNone(li3)
 
     def test_non_capturing_highlighting(self):
         """Verify that highlight rules with non-capturing patterns (no groups) are correctly highlighted."""

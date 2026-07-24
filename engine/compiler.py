@@ -1120,89 +1120,10 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
     append_external_link_footnotes(soup)
     cleanup_list_text_nodes(soup)
 
-    # Process list items: star list item nowrap and colon wrapping prevention in a single pass
+    # Unwrap any strong tags inside list items (<li>) to strictly prevent line breaks in WeChat
     for li in soup.find_all('li'):
-        # 1. Apply nowrap inline style to star list items to prevent mobile wrapping
-        text = li.get_text().strip()
-        is_star_list_item = False
-        if text and text[0].isdigit() and ('：' in text or ': ' in text):
-            if any(img.get('alt') in ('红星', '黄星') for img in li.find_all('img')) or '星' in text:
-                existing_style = li.get('style', '').strip()
-                nowrap_rule = "white-space: nowrap !important;"
-                if existing_style:
-                    if not existing_style.endswith(';'):
-                        existing_style += ';'
-                    li['style'] = existing_style + " " + nowrap_rule
-                else:
-                    li['style'] = nowrap_rule
-                is_star_list_item = True
-
-        # 2. Prevent line breaks around the first colon in list items
-        if is_star_list_item:
-            continue
-            
-        target = li.find('p') or li
-        fix_strong_colon_wrapping(soup, target)
-        
-        # Check if already handled via strong tags
-        if target.find('strong'):
-            continue
-            
-        colon_match = re.search(r'[:：]', text)
-        if not colon_match:
-            continue
-            
-        colon_idx = colon_match.start()
-        
-        children = list(target.contents)
-        nodes_to_wrap = []
-        remaining_nodes = []
-        current_len = 0
-        found = False
-        
-        for child in children:
-            if found:
-                remaining_nodes.append(child)
-                continue
-                
-            child_text = child.get_text() if hasattr(child, 'get_text') else str(child)
-            child_len = len(child_text)
-            
-            if current_len <= colon_idx < current_len + child_len:
-                found = True
-                rel_idx = colon_idx - current_len
-                
-                # Check if it's a text node (NavigableString/str or has no name)
-                if not hasattr(child, 'name') or child.name is None:
-                    left_text = child[:rel_idx + 1]
-                    right_text = child[rel_idx + 1:]
-                    
-                    # Consume any trailing spaces to include them in nowrap
-                    spaces = ""
-                    while right_text and right_text[0] in (' ', '\t'):
-                        spaces += right_text[0]
-                        right_text = right_text[1:]
-                        
-                    left_node = soup.new_string(left_text + spaces)
-                    nodes_to_wrap.append(left_node)
-                    if right_text:
-                        right_node = soup.new_string(right_text)
-                        remaining_nodes.append(right_node)
-                else:
-                    nodes_to_wrap.append(child)
-            else:
-                nodes_to_wrap.append(child)
-                current_len += child_len
-                
-        if nodes_to_wrap:
-            target.clear()
-            span_tag = soup.new_tag('span')
-            span_tag['style'] = 'white-space: nowrap !important;'
-            for node in nodes_to_wrap:
-                span_tag.append(node)
-            target.append(span_tag)
-            for node in remaining_nodes:
-                target.append(node)
+        for strong in list(li.find_all('strong')):
+            strong.unwrap()
 
     # Prevent line breaks around colons in regular paragraphs
     for p in soup.find_all('p'):

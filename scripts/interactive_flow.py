@@ -175,12 +175,8 @@ def main():
     parser.add_argument("input_file", help="输入 Markdown 文件路径")
     parser.add_argument("--pack", help="内容包目录路径（如 packs/danke）")
     parser.add_argument("--theme", help="CSS 主题名称")
-    parser.add_argument(
-        "-y", "--yes", "--non-interactive",
-        dest="yes",
-        action="store_true",
-        help="运行非交互模式，无需用户确认直接完成所有阶段"
-    )
+    parser.add_argument('-y', '--yes', '--non-interactive', action='store_true', help='运行非交互模式，无需用户确认直接完成所有阶段')
+    parser.add_argument('-n', '--new', '--force-new', dest='force_new', action='store_true', help='强制创建新草稿')
 
     args = parser.parse_args()
 
@@ -302,6 +298,7 @@ def main():
         cover_path=cover_arg[1] if cover_arg else None,
         appid=appid,
         appsecret=appsecret,
+        force_new=args.force_new,
     )
     print("\n🎉 微信公众号发布流程结束！")
 
