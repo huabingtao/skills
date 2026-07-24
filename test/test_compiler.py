@@ -290,7 +290,7 @@ class TestWeChatCompiler(unittest.TestCase):
         
         img = soup.find('img', attrs={'alt': '二维码'})
         self.assertIsNotNone(img)
-        self.assertIn("assets/img/其它/qrcode.png", img['src'])
+        self.assertIn("assets/img/其它/微信公众号二维码.png", img['src'])
 
     def test_unordered_list_normalization(self):
         """Verify that unordered lists starting with '*' or '+' are normalized to '-' during preprocess."""
