@@ -75,19 +75,18 @@ def update_all_mappings():
                 print(f"Fixed: '{key}': {path} -> {disk_files_stripped[stripped_key]}")
                 fixed_count += 1
 
-    # 3. 扫盘自动补充：将新扫描到但不在映射字典中的所有收藏品文件注册进去
+    # 3. 扫盘自动补充：将新扫描到但不在映射字典中的所有图片文件注册进去
     added_count = 0
-    collections_assets_dir = os.path.join(assets_dir, "收藏品")
-    if os.path.exists(collections_assets_dir):
-        for r, d, fs in os.walk(collections_assets_dir):
+    if os.path.exists(assets_dir):
+        for r, d, fs in os.walk(assets_dir):
             for f in fs:
-                if f.endswith(('.png', '.jpg', '.jpeg')):
+                if f.endswith(('.png', '.jpg', '.jpeg', '.webp')):
                     full_path = os.path.join(r, f)
                     rel_path = os.path.relpath(full_path, pack_dir)
                     basename = os.path.basename(f)
                     name_only = os.path.splitext(basename)[0]
                     
-                    # 如果这个收藏品原始名字没有映射，直接添加
+                    # 如果这个图片原始名字没有映射，直接添加
                     if name_only not in mapping:
                         mapping[name_only] = rel_path
                         print(f"Added new mapping for '{name_only}': {rel_path}")
@@ -95,7 +94,7 @@ def update_all_mappings():
                     
                     # 尝试添加剥离前缀的名字映射
                     stripped_name = strip_prefix(name_only)
-                    if stripped_name not in mapping:
+                    if stripped_name not in mapping and stripped_name != name_only:
                         mapping[stripped_name] = rel_path
                         print(f"Added new stripped mapping for '{stripped_name}': {rel_path}")
                         added_count += 1
