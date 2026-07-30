@@ -114,7 +114,23 @@ def process_content_images(client, html_content, base_dir, cache, cache_file):
             
         temp_file = None
         try:
-            if src.startswith(('http://', 'https://')):
+            if src.startswith('data:image/'):
+                header, base64_data = src.split(',', 1)
+                ext = '.png'
+                if 'image/jpeg' in header or 'image/jpg' in header:
+                    ext = '.jpg'
+                elif 'image/gif' in header:
+                    ext = '.gif'
+                elif 'image/webp' in header:
+                    ext = '.webp'
+                import base64
+                img_bytes = base64.b64decode(base64_data)
+                fd, temp_path = tempfile.mkstemp(suffix=ext)
+                with os.fdopen(fd, 'wb') as tmp:
+                    tmp.write(img_bytes)
+                temp_file = temp_path
+                upload_path = temp_path
+            elif src.startswith(('http://', 'https://')):
                 # External URL: Download to temp file
                 print(f"  → Downloading remote image: {src[:50]}...")
                 response = requests.get(src, timeout=10)

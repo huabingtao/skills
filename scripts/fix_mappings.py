@@ -7,7 +7,7 @@ import os
 import json
 
 def update_all_mappings():
-    skill_root = "/Users/hbt/my-project/skills/danke-strategy-skill"
+    skill_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     pack_dir = os.path.join(skill_root, "packs/danke")
     mapping_path = os.path.join(pack_dir, "image_mapping.json")
     assets_dir = os.path.join(pack_dir, "assets/img")

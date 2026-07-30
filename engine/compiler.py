@@ -270,34 +270,61 @@ class ImageResolver:
         return False
 
     def relative_to_project(self, path):
+        if not path:
+            return path
+        
+        abs_path = None
+        if os.path.isabs(path) and os.path.exists(path):
+            abs_path = path
+        elif self.assets_dir:
+            cand = os.path.abspath(os.path.join(self.assets_dir, "..", path))
+            if os.path.exists(cand):
+                abs_path = cand
+        if not abs_path and self.input_dir:
+            cand = os.path.abspath(os.path.join(self.input_dir, path))
+            if os.path.exists(cand):
+                abs_path = cand
+        
+        if not abs_path:
+            abs_path = os.path.abspath(path)
+
+        if self.input_dir and os.path.exists(abs_path):
+            try:
+                rel = os.path.relpath(abs_path, os.path.abspath(self.input_dir)).replace('\\', '/')
+                return rel
+            except ValueError:
+                pass
+
         project_root = os.path.dirname(self.assets_dir) if self.assets_dir else ""
         if not project_root:
-            return path
-        if os.path.isabs(path):
-            try:
-                rel = os.path.relpath(path, project_root).replace('\\', '/')
-                if not rel.startswith('..'):
-                    return rel
-            except ValueError:
-                pass
-            return path
-        if self.input_dir and os.path.exists(os.path.join(self.input_dir, path)):
-            abs_path = os.path.abspath(os.path.join(self.input_dir, path))
-            try:
-                rel = os.path.relpath(abs_path, project_root).replace('\\', '/')
-                if not rel.startswith('..'):
-                    return rel
-            except ValueError:
-                pass
             return abs_path
-        return path
+        try:
+            rel = os.path.relpath(abs_path, project_root).replace('\\', '/')
+            return rel
+        except ValueError:
+            return abs_path
+
+    def get_absolute_path(self, path):
+        if not path:
+            return None
+        if os.path.isabs(path) and os.path.exists(path):
+            return path
+        if self.assets_dir:
+            cand = os.path.abspath(os.path.join(self.assets_dir, "..", path))
+            if os.path.exists(cand):
+                return cand
+        if self.input_dir:
+            cand = os.path.abspath(os.path.join(self.input_dir, path))
+            if os.path.exists(cand):
+                return cand
+        return None
 
     def normalize_cover_src(self, src):
         return src.replace('img://', '').replace('[占位图:', '').replace('[占位图', '').replace(']', '').strip().lstrip(':').strip()
 
-    def resolve_image_src(self, src, allow_placeholder=True):
+    def resolve_image_src(self, src, allow_placeholder=True, embed_base64=False):
         src = (src or '').strip()
-        if not src or src.startswith(('http://', 'https://')):
+        if not src or src.startswith(('http://', 'https://', 'data:')):
             return src
 
         src_clean = src.replace('img://', '')
@@ -305,28 +332,39 @@ class ImageResolver:
         key_name = os.path.splitext(base_name)[0]
 
         mapped_path = self.image_mapping.get(src_clean) or self.image_mapping.get(base_name) or self.image_mapping.get(key_name)
+        file_path = None
         if mapped_path and self.check_file_exists(mapped_path):
-            return self.relative_to_project(mapped_path)
+            file_path = self.get_absolute_path(mapped_path)
+        elif self.check_file_exists(src_clean):
+            file_path = self.get_absolute_path(src_clean)
+        else:
+            fallback_match = self.assets_cache.get(key_name.lower()) or self.assets_cache.get(base_name.lower())
+            if not fallback_match:
+                def strip_prefix(s):
+                    parts = s.split('-', 1)
+                    if len(parts) >= 2 and parts[0].isdigit():
+                        return parts[1]
+                    return s
+                stripped_key = strip_prefix(key_name)
+                stripped_base = strip_prefix(base_name)
+                fallback_match = self.assets_cache.get(stripped_key.lower()) or self.assets_cache.get(stripped_base.lower())
+            if fallback_match and self.check_file_exists(fallback_match):
+                file_path = self.get_absolute_path(fallback_match)
 
-        if self.check_file_exists(src_clean):
-            return self.relative_to_project(src_clean)
-
-        fallback_match = self.assets_cache.get(key_name.lower()) or self.assets_cache.get(base_name.lower())
-        if not fallback_match:
-            # Try prefix-stripped variants as a fallback
-            def strip_prefix(s):
-                parts = s.split('-', 1)
-                if len(parts) >= 2 and parts[0].isdigit():
-                    return parts[1]
-                return s
-            stripped_key = strip_prefix(key_name)
-            stripped_base = strip_prefix(base_name)
-            fallback_match = self.assets_cache.get(stripped_key.lower()) or self.assets_cache.get(stripped_base.lower())
-
-        if fallback_match:
-            if self.verbose:
-                print("ℹ Auto-resolved missing image '" + str(src) + "' via folder scanning to: " + str(fallback_match))
-            return self.relative_to_project(fallback_match)
+        if file_path and os.path.exists(file_path):
+            if embed_base64:
+                try:
+                    import base64
+                    ext = os.path.splitext(file_path)[1].lower().lstrip('.')
+                    if ext == 'jpg':
+                        ext = 'jpeg'
+                    mime = f"image/{ext}" if ext in ('png', 'jpeg', 'gif', 'webp', 'svg+xml') else "image/png"
+                    with open(file_path, 'rb') as f:
+                        b64_data = base64.b64encode(f.read()).decode('utf-8')
+                    return f"data:{mime};base64,{b64_data}"
+                except Exception:
+                    pass
+            return self.relative_to_project(file_path)
 
         if self.verbose:
             print("⚠ Warning: Image '" + str(src) + "' not found on disk or mapping. Leaving it blank.")
@@ -424,7 +462,7 @@ def process_soup_images(soup, resolver):
 
         src = img.get('src', '').strip()
         if src and not src.startswith(('http://', 'https://')):
-            img['src'] = resolver.resolve_image_src(src)
+            img['src'] = resolver.resolve_image_src(src, embed_base64=True)
 
     # Clean up <br/> tags between consecutive inline-block/grid images or wrappers
     for br in list(soup.find_all('br')):
@@ -875,12 +913,14 @@ def build_recommendations_section(soup, project_config, input_dir, metadata):
     if not recs:
         return None
 
-    # Default preset gradients for cards without a background image
+    # Default premium low-saturation dark gradients
     default_gradients = [
-        "linear-gradient(135deg, #2b1055 0%, #7597de 100%)",
-        "linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%)",
-        "linear-gradient(135deg, #370617 0%, #6a040f 50%, #9d0208 100%)",
-        "linear-gradient(135deg, #132a13 0%, #31572c 50%, #4f772d 100%)"
+        "linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%)",  # Slate Dark
+        "linear-gradient(135deg, #18181b 0%, #27272a 50%, #3f3f46 100%)",  # Zinc Dark
+        "linear-gradient(135deg, #064e3b 0%, #047857 50%, #059669 100%)",  # Emerald Dark
+        "linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4338ca 100%)",  # Indigo Dark
+        "linear-gradient(135deg, #450a0a 0%, #7f1d1d 50%, #991b1b 100%)",  # Rose Dark
+        "linear-gradient(135deg, #132a13 0%, #31572c 50%, #4f772d 100%)"   # Olive Dark
     ]
 
     rec_div = soup.new_tag('section')
@@ -919,81 +959,45 @@ def build_recommendations_section(soup, project_config, input_dir, metadata):
 
     rec_div.append(title_div)
 
-    # Render Method 2 HTML/CSS Cards
+    # Render Method 2 HTML/CSS Cards (Pure Color/Gradient Flex-end Layout without Arrow Icon)
     for idx, item in enumerate(recs):
         a_tag = soup.new_tag('a')
         a_tag['href'] = item.get('url', '#') or '#'
         a_tag['target'] = "_blank"
-        a_tag['style'] = "text-decoration: none; display: block; margin-bottom: 14px; -webkit-tap-highlight-color: transparent;"
+        a_tag['style'] = "text-decoration: none; display: block; margin-bottom: 12px; -webkit-tap-highlight-color: transparent;"
 
-        img_raw = item.get('image') or item.get('cover') or item.get('bg_image')
-        img_src = None
-        if img_raw:
-            if img_raw.startswith('img://') or not img_raw.startswith(('http://', 'https://', 'data:')):
-                try:
-                    from .compiler import ImageResolver
-                    resolver = ImageResolver(project_config, input_dir=input_dir)
-                    img_src = resolver.resolve_image_src(img_raw)
-                except Exception:
-                    img_src = img_raw
-            else:
-                img_src = img_raw
-
-        if img_src:
-            bg_css = f"background-image: linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.3) 50%, rgba(0,0,0,0) 100%), url('{img_src}');"
-        else:
-            gradient = default_gradients[idx % len(default_gradients)]
-            bg_css = f"background-image: linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.3) 50%, rgba(0,0,0,0) 100%), {gradient};"
+        gradient = default_gradients[idx % len(default_gradients)]
 
         card_sec = soup.new_tag('section')
         card_sec['style'] = (
             "position: relative; "
             "width: 100%; "
-            "height: 120px; "
+            "height: 95px; "
             "border-radius: 12px; "
             "overflow: hidden; "
-            f"{bg_css} "
-            "background-size: cover; "
-            "background-position: center; "
-            "box-shadow: 0 4px 12px rgba(0,0,0,0.1); "
             "box-sizing: border-box; "
-            "display: block;"
+            "display: flex; "
+            "flex-direction: column; "
+            "justify-content: flex-end; "
+            "align-items: flex-start; "
+            "padding: 14px 16px; "
+            "margin-bottom: 14px; "
+            f"background: {gradient};"
         )
 
-        # Top-right badge icon
-        badge_sec = soup.new_tag('section')
-        badge_sec['style'] = (
-            "position: absolute; "
-            "top: 8px; "
-            "right: 8px; "
-            "background: rgba(0, 0, 0, 0.4); "
-            "border-radius: 4px; "
-            "padding: 2px 6px; "
-            "color: #ffffff; "
-            "font-size: 11px; "
-            "font-weight: bold; "
-            "display: inline-block;"
-        )
-        badge_sec.string = "↗"
-        card_sec.append(badge_sec)
-
-        # Bottom title text
         title_sec = soup.new_tag('section')
         title_sec['style'] = (
-            "position: absolute; "
-            "bottom: 12px; "
-            "left: 12px; "
-            "right: 12px; "
+            "width: 100%; "
             "color: #ffffff; "
             "font-size: 15px; "
             "font-weight: bold; "
             "line-height: 1.4; "
-            "text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9); "
-            "word-break: break-word; "
+            "letter-spacing: 0.3px; "
+            "text-align: left; "
             "overflow: hidden; "
-            "display: -webkit-box; "
-            "-webkit-line-clamp: 2; "
-            "-webkit-box-orient: vertical;"
+            "text-overflow: ellipsis; "
+            "white-space: nowrap; "
+            "display: block;"
         )
         title_sec.string = item.get('title', '')
         card_sec.append(title_sec)
