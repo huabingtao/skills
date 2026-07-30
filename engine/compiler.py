@@ -553,6 +553,50 @@ def cleanup_list_text_nodes(soup):
                 child.extract()
 
 
+def is_emoji_char(char):
+    if not char:
+        return False
+    cp = ord(char)
+    if (0x1F300 <= cp <= 0x1FAFF) or (0x2600 <= cp <= 0x27BF) or (0x1F600 <= cp <= 0x1F64F) or (0x1F680 <= cp <= 0x1F6FF):
+        return True
+    if char in ('👉', '📢', '🏆', '🍻', '🏰', '🔹', '📌', '▪️', '▫️', '⭐', '🌟', '💥', '🔥', '🚀', '📜', '📈'):
+        return True
+    return False
+
+
+def convert_lists_to_emoji_paragraphs(soup):
+    """
+    Converts <ul> / <ol> lists into clean Emoji Paragraphs (<p>) to completely bypass
+    WeChat mobile client auto-injecting native list bullet points (•) or empty <li> items.
+    """
+    for list_tag in list(soup.find_all(['ul', 'ol'])):
+        paragraphs = []
+        for li in list_tag.find_all('li'):
+            text = li.get_text(strip=True)
+            if not text and not li.find_all('img'):
+                continue
+            
+            p = soup.new_tag('p')
+            p['style'] = 'margin: 15px 0; line-height: 1.8; color: #333333; font-size: 16px; text-align: justify; word-break: break-word;'
+            
+            has_emoji = False
+            if text and is_emoji_char(text[0]):
+                has_emoji = True
+            
+            if not has_emoji:
+                emoji_str = "🔹 "
+                p.append(soup.new_string(emoji_str))
+                
+            for child in list(li.contents):
+                p.append(child)
+            paragraphs.append(p)
+            
+        if paragraphs:
+            for p in reversed(paragraphs):
+                list_tag.insert_after(p)
+            list_tag.decompose()
+
+
 def _move_colon_into_strong(soup, target):
     for strong in target.find_all('strong'):
         siblings_to_move = []
@@ -1119,17 +1163,11 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
     process_soup_images(soup, resolver)
     append_external_link_footnotes(soup)
     cleanup_list_text_nodes(soup)
-
-    # Unwrap any strong tags inside list items (<li>) to strictly prevent line breaks in WeChat
-    for li in soup.find_all('li'):
-        for strong in list(li.find_all('strong')):
-            strong.unwrap()
+    convert_lists_to_emoji_paragraphs(soup)
 
     # Prevent line breaks around colons in regular paragraphs
     for p in soup.find_all('p'):
-        # Only process top-level paragraphs that are not children of list items
-        if not p.find_parent('li'):
-            fix_strong_colon_wrapping(soup, p)
+        fix_strong_colon_wrapping(soup, p)
 
     # Prevent line breaks around the first colon in table cells (e.g. "盾伤: ...")
     for td in soup.find_all('td'):
