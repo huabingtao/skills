@@ -858,28 +858,40 @@ def build_recommendations_section(soup, project_config, input_dir, metadata):
         if len(selected) < 3:
             selected += other_recs[:3 - len(selected)]
 
-        recs = [{"title": x["title"], "url": "#"} for x in selected[:3]]
+        # Extract image if available
+        for art in selected[:3]:
+            art_meta = {}
+            try:
+                with open(art["path"], 'r', encoding='utf-8') as f:
+                    _, art_meta = extract_frontmatter(f.read())
+            except Exception:
+                pass
+            recs.append({
+                "title": art["title"],
+                "url": "#",
+                "image": art_meta.get("image") or art_meta.get("cover") or art_meta.get("bg_image")
+            })
 
     if not recs:
         return None
 
-    # 3. Build the HTML block using <section> tags for WeChat Official Account compatibility
-    # Get primary brand color (default to red highlight color #ff4d4f)
-    brand_color = "#ff4d4f"
+    # Default preset gradients for cards without a background image
+    default_gradients = [
+        "linear-gradient(135deg, #2b1055 0%, #7597de 100%)",
+        "linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%)",
+        "linear-gradient(135deg, #370617 0%, #6a040f 50%, #9d0208 100%)",
+        "linear-gradient(135deg, #132a13 0%, #31572c 50%, #4f772d 100%)"
+    ]
 
     rec_div = soup.new_tag('section')
     rec_div['style'] = (
         "margin: 30px auto 20px auto; "
-        "max-width: 360px; "
-        "padding: 24px 20px; "
-        "background-color: #f8fafc; "
-        "border: 1px dashed #e2e8f0; "
-        "border-radius: 12px; "
+        "max-width: 100%; "
         "box-sizing: border-box; "
         "display: block;"
     )
 
-    # Title
+    # Section Title / Header
     title_div = soup.new_tag('section')
     title_div['style'] = (
         "font-weight: bold; "
@@ -891,43 +903,106 @@ def build_recommendations_section(soup, project_config, input_dir, metadata):
         "display: block;"
     )
 
-    emoji_span = soup.new_tag('span')
-    emoji_span['style'] = "margin-right: 8px; font-size: 16px;"
-    emoji_span.string = "🌟"
-    title_div.append(emoji_span)
+    t1 = soup.new_tag('span')
+    t1.string = "下方查看"
+    title_div.append(t1)
 
-    text_span = soup.new_tag('span')
-    text_span.string = "往期精彩推荐"
-    title_div.append(text_span)
+    t2 = soup.new_tag('span')
+    t2['style'] = "color: #2563eb; margin: 0 2px;"
+    t2.string = "往期精彩推荐"
+    title_div.append(t2)
+
+    t3 = soup.new_tag('span')
+    t3['style'] = "color: #2563eb;"
+    t3.string = "🔻"
+    title_div.append(t3)
 
     rec_div.append(title_div)
 
-    # List items
-    for item in recs:
-        item_sec = soup.new_tag('section')
-        item_sec['style'] = (
-            "margin: 10px 0; "
-            "font-size: 14px; "
-            "text-align: left; "
-            "display: block; "
-            "line-height: 1.6;"
+    # Render Method 2 HTML/CSS Cards
+    for idx, item in enumerate(recs):
+        a_tag = soup.new_tag('a')
+        a_tag['href'] = item.get('url', '#') or '#'
+        a_tag['target'] = "_blank"
+        a_tag['style'] = "text-decoration: none; display: block; margin-bottom: 14px; -webkit-tap-highlight-color: transparent;"
+
+        img_raw = item.get('image') or item.get('cover') or item.get('bg_image')
+        img_src = None
+        if img_raw:
+            if img_raw.startswith('img://') or not img_raw.startswith(('http://', 'https://', 'data:')):
+                try:
+                    from .compiler import ImageResolver
+                    resolver = ImageResolver(project_config, input_dir=input_dir)
+                    img_src = resolver.resolve_image_src(img_raw)
+                except Exception:
+                    img_src = img_raw
+            else:
+                img_src = img_raw
+
+        if img_src:
+            bg_css = f"background-image: linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.3) 50%, rgba(0,0,0,0) 100%), url('{img_src}');"
+        else:
+            gradient = default_gradients[idx % len(default_gradients)]
+            bg_css = f"background-image: linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.3) 50%, rgba(0,0,0,0) 100%), {gradient};"
+
+        card_sec = soup.new_tag('section')
+        card_sec['style'] = (
+            "position: relative; "
+            "width: 100%; "
+            "height: 120px; "
+            "border-radius: 12px; "
+            "overflow: hidden; "
+            f"{bg_css} "
+            "background-size: cover; "
+            "background-position: center; "
+            "box-shadow: 0 4px 12px rgba(0,0,0,0.1); "
+            "box-sizing: border-box; "
+            "display: block;"
         )
 
-        arrow_span = soup.new_tag('span')
-        arrow_span['style'] = f"color: {brand_color}; margin-right: 8px; font-size: 12px; line-height: 20px;"
-        arrow_span.string = "👉"
-        item_sec.append(arrow_span)
+        # Top-right badge icon
+        badge_sec = soup.new_tag('section')
+        badge_sec['style'] = (
+            "position: absolute; "
+            "top: 8px; "
+            "right: 8px; "
+            "background: rgba(0, 0, 0, 0.4); "
+            "border-radius: 4px; "
+            "padding: 2px 6px; "
+            "color: #ffffff; "
+            "font-size: 11px; "
+            "font-weight: bold; "
+            "display: inline-block;"
+        )
+        badge_sec.string = "↗"
+        card_sec.append(badge_sec)
 
-        a_tag = soup.new_tag('a')
-        a_tag['href'] = item['url']
-        a_tag['target'] = "_blank"
-        a_tag['style'] = f"color: {brand_color}; text-decoration: none; font-weight: bold; line-height: 20px; word-break: break-all;"
-        a_tag.string = item['title']
+        # Bottom title text
+        title_sec = soup.new_tag('section')
+        title_sec['style'] = (
+            "position: absolute; "
+            "bottom: 12px; "
+            "left: 12px; "
+            "right: 12px; "
+            "color: #ffffff; "
+            "font-size: 15px; "
+            "font-weight: bold; "
+            "line-height: 1.4; "
+            "text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9); "
+            "word-break: break-word; "
+            "overflow: hidden; "
+            "display: -webkit-box; "
+            "-webkit-line-clamp: 2; "
+            "-webkit-box-orient: vertical;"
+        )
+        title_sec.string = item.get('title', '')
+        card_sec.append(title_sec)
 
-        item_sec.append(a_tag)
-        rec_div.append(item_sec)
+        a_tag.append(card_sec)
+        rec_div.append(a_tag)
 
     return rec_div
+
 
 
 def replace_recommendations_placeholder(soup, project_config, input_dir, metadata):

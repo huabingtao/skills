@@ -228,9 +228,9 @@ class TestWeChatCompiler(unittest.TestCase):
         # Verify recommended articles
         a_tags = soup.find_all('a')
         self.assertTrue(len(a_tags) >= 2)
-        self.assertEqual(a_tags[0].text, "推荐文章一")
+        self.assertIn("推荐文章一", a_tags[0].text)
         self.assertEqual(a_tags[0]['href'], "https://mp.weixin.qq.com/s/1")
-        self.assertEqual(a_tags[1].text, "推荐文章二")
+        self.assertIn("推荐文章二", a_tags[1].text)
         self.assertEqual(a_tags[1]['href'], "#")
 
     def test_recommendations_not_inserted_without_placeholder(self):
