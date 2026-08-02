@@ -1024,37 +1024,14 @@ def build_recommendations_section(soup, project_config, input_dir, metadata):
 
 def replace_recommendations_placeholder(soup, project_config, input_dir, metadata):
     """
-    Finds placeholder texts like {{往期推荐}} or {{往期精彩推荐}} and replaces them in-place with the section.
+    Finds placeholder texts like {{往期推荐}} or {{往期精彩推荐}} and removes them cleanly.
     """
-    target_node = None
-    placeholder_text = None
-    for text_node in soup.find_all(string=True):
-        if "{{往期推荐}}" in text_node:
-            target_node = text_node
-            placeholder_text = "{{往期推荐}}"
-            break
-        elif "{{往期精彩推荐}}" in text_node:
-            target_node = text_node
-            placeholder_text = "{{往期精彩推荐}}"
-            break
-
-    if not target_node:
-        return
-
-    rec_div = build_recommendations_section(soup, project_config, input_dir, metadata)
-    if not rec_div:
-        # Just clean up the placeholder
-        parent = target_node.parent
-        target_node.extract()
-        if parent and not parent.get_text().strip() and parent.name in ('p', 'div'):
-            parent.extract()
-        return
-
-    parent = target_node.parent
-    if parent and parent.name in ('p', 'div') and len(parent.get_text().strip()) == len(placeholder_text):
-        parent.replace_with(rec_div)
-    else:
-        target_node.replace_with(rec_div)
+    for text_node in list(soup.find_all(string=True)):
+        if "{{往期推荐}}" in text_node or "{{往期精彩推荐}}" in text_node:
+            parent = text_node.parent
+            text_node.extract()
+            if parent and not parent.get_text().strip() and parent.name in ('p', 'div', 'section'):
+                parent.extract()
 
 
 def build_qrcode_section(soup, project_config, input_dir, metadata):

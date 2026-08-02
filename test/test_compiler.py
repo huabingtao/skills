@@ -215,23 +215,14 @@ class TestWeChatCompiler(unittest.TestCase):
         self.assertIn("<font", preprocess_markdown(md, self.project_config, enable_highlight=True))
 
     def test_recommendations_section(self):
-        """Verify the '往期精彩推荐' section is generated from explicit metadata recommendations when placeholder is present."""
-        import re
-        md = "---\ntitle: 测试文章\nrecommendations:\n  - title: \"推荐文章一\"\n    url: \"https://mp.weixin.qq.com/s/1\"\n  - title: \"推荐文章二\"\n---\n文章主体内容。\n\n{{往期推荐}}"
+        """Verify that {{往期推荐}} placeholder is cleanly removed without generating recommendation block."""
+        md = "---\ntitle: 测试文章\n---\n文章主体内容。\n\n{{往期推荐}}"
         html, _ = convert_to_wechat_html(md, self.project_config)
         soup = BeautifulSoup(html, 'html.parser')
         
-        # Check that the section exists
-        rec_title = soup.find(lambda tag: tag.name == 'section' and "往期精彩推荐" in tag.get_text())
-        self.assertIsNotNone(rec_title)
-        
-        # Verify recommended articles
-        a_tags = soup.find_all('a')
-        self.assertTrue(len(a_tags) >= 2)
-        self.assertIn("推荐文章一", a_tags[0].text)
-        self.assertEqual(a_tags[0]['href'], "https://mp.weixin.qq.com/s/1")
-        self.assertIn("推荐文章二", a_tags[1].text)
-        self.assertEqual(a_tags[1]['href'], "#")
+        # Check that {{往期推荐}} is removed and no 往期精彩推荐 section exists
+        self.assertIsNone(rec_title)
+        self.assertNotIn("{{往期推荐}}", html)
 
     def test_recommendations_not_inserted_without_placeholder(self):
         """Verify that the recommendations section is NOT rendered when placeholder is absent."""
