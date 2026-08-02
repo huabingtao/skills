@@ -374,6 +374,14 @@ class ImageResolver:
             stripped_base = strip_prefix(base_name)
             fallback_match = self.assets_cache.get(stripped_key.lower()) or self.assets_cache.get(stripped_base.lower())
 
+        if not fallback_match and key_name:
+            # Fuzzy match: try substring search in assets_cache keys
+            target_key = key_name.lower()
+            for k, val in self.assets_cache.items():
+                if target_key in k or k in target_key:
+                    fallback_match = val
+                    break
+
         if fallback_match:
             if self.verbose:
                 print("ℹ Auto-resolved missing image '" + str(src) + "' via folder scanning to: " + str(fallback_match))
