@@ -49,3 +49,12 @@ description: 专为《弹壳特攻队》攻略提供一键美化排版与微信�
   * 主标题 H2 Icon：`📋 一、 活动基础信息与任务产出明细` / `📦 二、 开箱节点与道具产出分析` / `💎 三、 进度消耗与钻石补充分析` / `🛒 四、 兑换商店推荐` / `🏆 五、 排行榜奖池与并列提示`
   * 小章节 H3 与强调 Icon：`📊 开箱节点与产出对照` / `🎯 1. 目标: ...` / `💡 说明` / `🚨 周年庆备战提醒`
 - **一键全自动执行**：直接调用 `python scripts/interactive_flow.py -y <input_file> --pack packs/danke` 运行全自动流程，无需与用户进行交互确认。
+
+---
+
+## 5. 小红书/抖音图文切图联动 (Xiaohongshu / Douyin Card Slicing)
+当用户提出“生成小红书切图”、“公众号转图文”、“小红书卡片生成”、“切图”等诉求时，直接调用 **`article-to-img-skill`** 技能脚本完成原生 HTML 3:4 智能切图：
+
+```bash
+python3 /Users/hbt/my-project/skills/article-to-img-skill/scripts/export_cards.py <_wechat.html文件路径>
+```
