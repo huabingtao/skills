@@ -1,0 +1,5 @@
+venv/
+__pycache__/
+*.pyc
+_douyin_debug.png
+_douyin_error.png
