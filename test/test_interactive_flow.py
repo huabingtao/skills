@@ -50,42 +50,35 @@ class TestInteractiveFlow(unittest.TestCase):
         self.assertTrue(ok3)
         self.assertTrue(stage3_out.exists())
 
-    @patch('scripts.interactive_flow.publish_draft')
-    def test_non_interactive_flow_success(self, mock_publish_draft):
-        # Prepare a minimal source file
+    def test_non_interactive_flow_outputs_wechat_publisher_hint(self):
+        """After Stage 3, interactive_flow should print a hint to use wechat-publisher-skill."""
         input_file = self.tmp_path / "source.md"
         input_file.write_text("# 测试\n这里是测试内容。", encoding="utf-8")
 
-        # Mock sys.argv with non-interactive flag -y
         test_args = ["interactive_flow.py", str(input_file), "--pack", str(PROJECT_ROOT / "packs" / "danke"), "-y"]
-        
-        # Patch credentials to avoid setup_interactive_config call
-        with patch.dict(os.environ, {"WECHAT_APPID": "mock_id", "WECHAT_APPSECRET": "mock_secret"}):
-            with patch('sys.argv', test_args):
+
+        import io
+        from contextlib import redirect_stdout
+
+        buf = io.StringIO()
+        with patch('sys.argv', test_args):
+            with redirect_stdout(buf):
                 main()
-                
-        # Verify publish_draft was called once
-        mock_publish_draft.assert_called_once()
 
-    @patch('scripts.interactive_flow.setup_interactive_config')
-    def test_non_interactive_flow_aborts_on_missing_credentials(self, mock_setup_config):
-        # Prepare a minimal source file
+        output = buf.getvalue()
+        # Stage 4 is now wechat-publisher-skill; the flow should hint at it
+        self.assertIn("wechat-publisher-skill", output)
+
+    def test_non_interactive_flow_no_publish_call(self):
+        """interactive_flow should NOT call publish_draft after the publisher decoupling."""
         input_file = self.tmp_path / "source.md"
         input_file.write_text("# 测试\n这里是测试内容。", encoding="utf-8")
 
-        # Mock sys.argv with non-interactive flag -y
         test_args = ["interactive_flow.py", str(input_file), "--pack", str(PROJECT_ROOT / "packs" / "danke"), "-y"]
 
-        # Ensure environment lacks credentials
-        with patch.dict(os.environ, {}):
-            with patch('scripts.interactive_flow.load_config', return_value={}):
-                with patch('sys.argv', test_args):
-                    with self.assertRaises(SystemExit) as cm:
-                        main()
-                    self.assertEqual(cm.exception.code, 1)
-                    
-        # Ensure setup_interactive_config was NOT called
-        mock_setup_config.assert_not_called()
+        with patch('sys.argv', test_args):
+            # Should complete without any WeChat credential error
+            main()  # No SystemExit expected; no publish call expected
 
 
 if __name__ == "__main__":

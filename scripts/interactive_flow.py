@@ -16,7 +16,7 @@ sys.path.insert(0, PROJECT_ROOT)
 from engine.compiler import convert_to_wechat_html
 from engine.utils import load_image_mapping
 from engine.highlight import load_highlight_rules, apply_highlight_rules
-from engine.publisher import load_config, publish_draft, setup_interactive_config
+# wechat publishing moved to wechat-publisher-skill (see skills/wechat-publisher-skill/)
 from scripts.compile import load_project_config, build_default_config
 
 
@@ -261,46 +261,14 @@ def main():
     else:
         print(f"\n➡️ [Stage 3] 微信 HTML 编译完成！文件已保存至:\n   {stage3_path}")
 
-    # ==================== STAGE 4 ====================
-    print("\n🚀 [Stage 4/4] 正在调用发布程序发布至公众号草稿箱...")
-    
-    # Resolve cover image path from metadata and pass as --cover argument
-    cover_arg = []
-    meta_path = os.path.splitext(stage3_path)[0] + ".json"
-    if os.path.exists(meta_path):
-        try:
-            with open(meta_path, 'r', encoding='utf-8') as f:
-                meta = json.load(f)
-            img_rel = meta.get('image')
-            if img_rel:
-                pack_root = os.path.dirname(project_config.get('assets_dir')) if project_config.get('assets_dir') else PROJECT_ROOT
-                resolved_cover = os.path.abspath(os.path.join(pack_root, img_rel))
-                if os.path.exists(resolved_cover):
-                    cover_arg = ['--cover', resolved_cover]
-                else:
-                    if args.pack:
-                        resolved_cover2 = os.path.abspath(os.path.join(args.pack, img_rel))
-                        if os.path.exists(resolved_cover2):
-                            cover_arg = ['--cover', resolved_cover2]
-        except Exception as e:
-            print(f"Warning resolving cover path: {e}")
-
-    config = load_config()
-    appid = os.environ.get('WECHAT_APPID') or config.get('appid')
-    appsecret = os.environ.get('WECHAT_APPSECRET') or config.get('appsecret')
-    if not appid or not appsecret:
-        if args.yes:
-            print("❌ Error: WeChat credentials (appid, appsecret) are not configured in scripts/config.json or environment variables.")
-            sys.exit(1)
-        appid, appsecret = setup_interactive_config()
-    publish_draft(
-        content_path=stage3_path,
-        cover_path=cover_arg[1] if cover_arg else None,
-        appid=appid,
-        appsecret=appsecret,
-        force_new=args.force_new,
-    )
-    print("\n🎉 微信公众号发布流程结束！")
+    # ==================== STAGE 4 (已迁移) ====================
+    # 微信发布能力已独立为 wechat-publisher-skill，请单独调用：
+    #
+    #   python3 /Users/hbt/my-project/skills/wechat-publisher-skill/scripts/publish.py \
+    #     -c <_wechat.html 路径>
+    print(f"\n✅ [Stage 3] 完成！HTML 已保存至：\n   {stage3_path}")
+    print("\n💡 如需发布到微信公众号草稿箱，请使用 wechat-publisher-skill：")
+    print(f"   python3 /Users/hbt/my-project/skills/wechat-publisher-skill/scripts/publish.py -c {stage3_path}")
 
 
 
