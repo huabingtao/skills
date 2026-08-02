@@ -384,6 +384,12 @@ def publish_draft(
 
     print("→ Processing content images...")
     html_content = process_content_images(client, html_content, os.path.dirname(os.path.abspath(content_path)), cache, cache_file)
+    try:
+        with open(content_path, 'w', encoding='utf-8') as f:
+            f.write(html_content)
+        print(f"  ✅ Saved updated HTML with WeChat CDN image URLs to: {content_path}")
+    except Exception as e:
+        print(f"  ⚠ Could not save updated CDN HTML back to disk: {e}")
 
     current_html_hash = hashlib.md5(html_content.encode('utf-8')).hexdigest()
     current_cover_hash = cover_md5

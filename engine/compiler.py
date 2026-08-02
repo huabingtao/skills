@@ -269,6 +269,19 @@ class ImageResolver:
             return True
         return False
 
+    def get_abs_path(self, path):
+        if not path:
+            return ""
+        if os.path.isabs(path) and os.path.exists(path):
+            return os.path.abspath(path)
+        if self.assets_dir:
+            cand = os.path.abspath(os.path.join(self.assets_dir, "..", path))
+            if os.path.exists(cand):
+                return cand
+        if self.input_dir:
+            cand = os.path.abspath(os.path.join(self.input_dir, path))
+            if os.path.exists(cand):
+                return cand
     def relative_to_project(self, path):
         if not path:
             return path
@@ -319,6 +332,16 @@ class ImageResolver:
                 return cand
         return None
 
+    def relative_to_input_or_project(self, path):
+        abs_p = self.get_abs_path(path)
+        if self.input_dir and abs_p and os.path.isabs(abs_p) and os.path.exists(abs_p):
+            try:
+                rel = os.path.relpath(abs_p, self.input_dir).replace('\\', '/')
+                return rel
+            except ValueError:
+                pass
+        return self.relative_to_project(path)
+
     def normalize_cover_src(self, src):
         return src.replace('img://', '').replace('[占位图:', '').replace('[占位图', '').replace(']', '').strip().lstrip(':').strip()
 
@@ -334,37 +357,27 @@ class ImageResolver:
         mapped_path = self.image_mapping.get(src_clean) or self.image_mapping.get(base_name) or self.image_mapping.get(key_name)
         file_path = None
         if mapped_path and self.check_file_exists(mapped_path):
-            file_path = self.get_absolute_path(mapped_path)
-        elif self.check_file_exists(src_clean):
-            file_path = self.get_absolute_path(src_clean)
-        else:
-            fallback_match = self.assets_cache.get(key_name.lower()) or self.assets_cache.get(base_name.lower())
-            if not fallback_match:
-                def strip_prefix(s):
-                    parts = s.split('-', 1)
-                    if len(parts) >= 2 and parts[0].isdigit():
-                        return parts[1]
-                    return s
-                stripped_key = strip_prefix(key_name)
-                stripped_base = strip_prefix(base_name)
-                fallback_match = self.assets_cache.get(stripped_key.lower()) or self.assets_cache.get(stripped_base.lower())
-            if fallback_match and self.check_file_exists(fallback_match):
-                file_path = self.get_absolute_path(fallback_match)
+            return self.relative_to_input_or_project(mapped_path)
 
-        if file_path and os.path.exists(file_path):
-            if embed_base64:
-                try:
-                    import base64
-                    ext = os.path.splitext(file_path)[1].lower().lstrip('.')
-                    if ext == 'jpg':
-                        ext = 'jpeg'
-                    mime = f"image/{ext}" if ext in ('png', 'jpeg', 'gif', 'webp', 'svg+xml') else "image/png"
-                    with open(file_path, 'rb') as f:
-                        b64_data = base64.b64encode(f.read()).decode('utf-8')
-                    return f"data:{mime};base64,{b64_data}"
-                except Exception:
-                    pass
-            return self.relative_to_project(file_path)
+        if self.check_file_exists(src_clean):
+            return self.relative_to_input_or_project(src_clean)
+
+        fallback_match = self.assets_cache.get(key_name.lower()) or self.assets_cache.get(base_name.lower())
+        if not fallback_match:
+            # Try prefix-stripped variants as a fallback
+            def strip_prefix(s):
+                parts = s.split('-', 1)
+                if len(parts) >= 2 and parts[0].isdigit():
+                    return parts[1]
+                return s
+            stripped_key = strip_prefix(key_name)
+            stripped_base = strip_prefix(base_name)
+            fallback_match = self.assets_cache.get(stripped_key.lower()) or self.assets_cache.get(stripped_base.lower())
+
+        if fallback_match:
+            if self.verbose:
+                print("ℹ Auto-resolved missing image '" + str(src) + "' via folder scanning to: " + str(fallback_match))
+            return self.relative_to_input_or_project(fallback_match)
 
         if self.verbose:
             print("⚠ Warning: Image '" + str(src) + "' not found on disk or mapping. Leaving it blank.")
