@@ -431,7 +431,7 @@ def publish_draft(
             print("🚀 DRAFT UPDATE SUCCESSFUL!")
             print(f"Draft MediaID: {existing_media_id}")
             print("="*40)
-            print("您现在可以前往微信公众号后台"草稿箱"查看。")
+            print("您现在可以前往微信公众号后台‘草稿箱’查看。")
             return PublishResult(media_id=existing_media_id, action="update")
         except Exception as e:
             if "invalid media_id" not in str(e).lower() and "40007" not in str(e):
@@ -453,7 +453,7 @@ def publish_draft(
     print("🚀 DRAFT CREATION SUCCESSFUL!")
     print(f"Draft MediaID: {draft_media_id}")
     print("="*40)
-    print("您现在可以前往微信公众号后台"草稿箱"查看。")
+    print("您现在可以前往微信公众号后台‘草稿箱’查看。")
     return PublishResult(media_id=draft_media_id, action="create")
 
 
