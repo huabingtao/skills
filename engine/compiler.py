@@ -229,6 +229,15 @@ def preprocess_markdown(md_content, project_config=None, enable_highlight=None):
     md_content = re.sub(r'\[([^\]\n]+)\]\{([a-zA-Z0-9\sāáǎàēéěèīíǐìōóǒòūúǔùüǘǚǜ]+)\}', r'<ruby>\1<rt>\2</rt></ruby>', md_content)
     md_content = re.sub(r'(?<!\!)\[([^\]\n]+)\]\((img://[^\)\n]+)\)', r'![\1](\2)', md_content)
 
+    # Auto-resolve link:// keywords from links_map
+    links_map = project_config.get("links_map") or {}
+    def _replace_link_shorthand(m):
+        text = m.group(1)
+        target = m.group(2).strip()
+        url = links_map.get(target, '#')
+        return f'[{text}]({url})'
+    md_content = re.sub(r'\[([^\]\n]+)\]\(link://([^)\n]+)\)', _replace_link_shorthand, md_content)
+
     highlight_rules_path = project_config.get("highlight_rules_path")
     if enable_highlight and highlight_rules_path:
         rules = load_highlight_rules(highlight_rules_path)
@@ -244,7 +253,14 @@ class ImageResolver:
 
     def __init__(self, project_config, input_dir=None, verbose=False):
         self.project_config = project_config or {}
-        self.input_dir = input_dir
+        if input_dir:
+            if os.path.isfile(input_dir):
+                self.input_dir = os.path.dirname(os.path.abspath(input_dir))
+            else:
+                self.input_dir = os.path.abspath(input_dir)
+        else:
+            self.input_dir = None
+
         self.verbose = verbose
         self.assets_dir = self.project_config.get("assets_dir")
         self.image_mapping_path = self.project_config.get("image_mapping_path")
@@ -256,7 +272,14 @@ class ImageResolver:
             ensure_placeholder_exists(self.placeholder_dir)
 
         self.assets_cache = scan_assets(self.assets_dir) if self.assets_dir else {}
+        if self.input_dir:
+            input_cache = scan_assets(self.input_dir)
+            for k, v in input_cache.items():
+                if k not in self.assets_cache:
+                    self.assets_cache[k] = v
+
         self.image_mapping = load_image_mapping(self.image_mapping_path) if self.image_mapping_path else {}
+
 
     def check_file_exists(self, path):
         if not path:
@@ -374,11 +397,11 @@ class ImageResolver:
             stripped_base = strip_prefix(base_name)
             fallback_match = self.assets_cache.get(stripped_key.lower()) or self.assets_cache.get(stripped_base.lower())
 
-        if not fallback_match and key_name:
-            # Fuzzy match: try substring search in assets_cache keys
+        if not fallback_match and key_name and len(key_name) >= 3:
+            # Fuzzy match: try substring search in assets_cache keys (require length >= 3 to avoid random emoji matching)
             target_key = key_name.lower()
             for k, val in self.assets_cache.items():
-                if target_key in k or k in target_key:
+                if len(k) >= 3 and (target_key in k or k in target_key):
                     fallback_match = val
                     break
 
@@ -392,13 +415,15 @@ class ImageResolver:
         return ""
 
     def resolve_metadata_cover(self, metadata):
-        cover = metadata.get('image')
+        cover = metadata.get('cover') or metadata.get('image')
         if not cover:
             return metadata
         resolved = self.resolve_image_src(self.normalize_cover_src(cover), allow_placeholder=True)
         if resolved:
+            metadata['cover'] = resolved
             metadata['image'] = resolved
         return metadata
+
 
 
 def resolve_image_src(src, resolver_context):
@@ -414,23 +439,21 @@ def parse_image_params(params_str):
     params = {}
     if not params_str:
         return params
-    
-    # 提取 key=value 或 key:value 组合（支持双引号、单引号或无引号值，支持中文字符与空格）
-    pattern = r'([\w\-]+)\s*[:=]\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s;,}]+))'
-    matches = re.findall(pattern, params_str)
-    for match in matches:
-        key = match[0].strip()
-        val = match[1] if match[1] != '' else (match[2] if match[2] != '' else match[3])
-        params[key] = val.strip()
 
-    # 如果无 k-v，支持形如 {50%} 或 {300px} 的直接宽度写法
-    if not params and params_str.strip():
-        val = params_str.strip().strip('{}')
-        if val.endswith('%') or val.endswith('px') or val.isdigit():
-            params['w'] = val
-            params['width'] = val
+    raw = params_str.strip().strip('{}')
+    pairs = re.split(r'[,;\s]+', raw)
+    for p in pairs:
+        if not p:
+            continue
+        if '=' in p or ':' in p:
+            kv = re.split(r'[:=]', p, 1)
+            params[kv[0].strip()] = kv[1].strip()
+        elif p in ('center', 'banner', 'card', 'grid2', 'grid3', 'grid4', 'float-left', 'float-right', 'avatar', 'icon'):
+            params['type'] = p
+        elif p.endswith('%') or p.endswith('px') or p.isdigit():
+            params['w'] = p
+            params['width'] = p
 
-    # 别名无缝互映射: width <-> w, height <-> h
     if 'width' in params and 'w' not in params:
         params['w'] = params['width']
     if 'w' in params and 'width' not in params:
@@ -448,16 +471,37 @@ def process_soup_images(soup, resolver):
     Applies custom image styles, cleans width/height attrs, and resolves sources.
     """
     for img in list(soup.find_all('img')):
+        params = {}
+
+        # 1. Check if next sibling contains {params} in raw text
         sibling = img.next_sibling
         if sibling and isinstance(sibling, str):
             stripped_sibling = sibling.lstrip()
             if stripped_sibling.startswith('{'):
                 match = re.match(r'^\{(.*?)\}', stripped_sibling)
                 if match:
-                    apply_image_node_styles(img, parse_image_params(match.group(1)), soup=soup)
+                    params.update(parse_image_params(match.group(1)))
                     rest = stripped_sibling[match.end():]
                     orig_space = sibling[:len(sibling) - len(stripped_sibling)]
                     sibling.replace_with(orig_space + rest)
+
+        # 2. Extract attributes on <img> added by python-markdown attr_list extension
+        attrs_to_remove = []
+        for attr_k, attr_v in list(img.attrs.items()):
+            if attr_k in ('type', 'w', 'width', 'h', 'height', 'caption', 'pd'):
+                params[attr_k] = str(attr_v)
+                attrs_to_remove.append(attr_k)
+            elif ',' in attr_k or '=' in str(attr_k):
+                attr_str = str(attr_k) + ('=' + str(attr_v) if attr_v else '')
+                parsed = parse_image_params(attr_str)
+                params.update(parsed)
+                attrs_to_remove.append(attr_k)
+
+        for ak in attrs_to_remove:
+            img.attrs.pop(ak, None)
+
+        if params:
+            apply_image_node_styles(img, params, soup=soup)
 
         width = img.get('width')
         height = img.get('height')
@@ -484,6 +528,7 @@ def process_soup_images(soup, resolver):
         src = img.get('src', '').strip()
         if src and not src.startswith(('http://', 'https://')):
             img['src'] = resolver.resolve_image_src(src, embed_base64=True)
+
 
     # Clean up <br/> tags between consecutive inline-block/grid images or wrappers
     for br in list(soup.find_all('br')):
@@ -980,49 +1025,81 @@ def build_recommendations_section(soup, project_config, input_dir, metadata):
 
     rec_div.append(title_div)
 
-    # Render Method 2 HTML/CSS Cards (Pure Color/Gradient Flex-end Layout without Arrow Icon)
+    resolver = ImageResolver(project_config, input_dir=input_dir)
+    valid_illustration_indices = list(range(1, 10))
+
+    # Render HTML/CSS Cards with 往期精彩插图 (1..9) background image & WeChat-editor-safe overlay
     for idx, item in enumerate(recs):
         a_tag = soup.new_tag('a')
         a_tag['href'] = item.get('url', '#') or '#'
         a_tag['target'] = "_blank"
-        a_tag['style'] = "text-decoration: none; display: block; margin-bottom: 12px; -webkit-tap-highlight-color: transparent;"
+        a_tag['style'] = "text-decoration: none; display: block; margin-bottom: 22px; -webkit-tap-highlight-color: transparent;"
 
-        gradient = default_gradients[idx % len(default_gradients)]
+        # Pick illustration strictly from valid set [1, 3, 4, 5] (skipping 2 due to bad aspect ratio)
+        pic_idx = valid_illustration_indices[idx % len(valid_illustration_indices)]
+        img_name = f"img://往期精彩插图{pic_idx}"
+        bg_src = resolver.resolve_image_src(item.get('image') or img_name)
 
         card_sec = soup.new_tag('section')
         card_sec['style'] = (
             "position: relative; "
             "width: 100%; "
-            "height: 95px; "
             "border-radius: 12px; "
             "overflow: hidden; "
+            "box-sizing: border-box; "
+            "display: block; "
+            "margin-bottom: 6px; "
+            "box-shadow: 0 4px 12px rgba(0,0,0,0.15);"
+        )
+
+        # 1. Background Image tag (WeChat CDN compatible, 100% width, fixed 110px height)
+        img_tag = soup.new_tag('img')
+        img_tag['src'] = bg_src
+        img_tag['style'] = (
+            "width: 100%; "
+            "height: 110px; "
+            "object-fit: cover; "
+            "display: block; "
+            "vertical-align: middle; "
+            "border-radius: 12px;"
+        )
+        card_sec.append(img_tag)
+
+        # 2. Editable Text Overlay Layer pulled UP over the image using negative margin & gradient background
+        overlay_sec = soup.new_tag('section')
+        overlay_sec['style'] = (
+            "margin-top: -110px; "
+            "height: 110px; "
+            "position: relative; "
+            "z-index: 10; "
+            "padding: 16px; "
             "box-sizing: border-box; "
             "display: flex; "
             "flex-direction: column; "
             "justify-content: flex-end; "
-            "align-items: flex-start; "
-            "padding: 14px 16px; "
-            "margin-bottom: 14px; "
-            f"background: {gradient};"
+            "background: linear-gradient(180deg, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.85) 100%); "
+            "border-radius: 0 0 12px 12px;"
         )
 
         title_sec = soup.new_tag('section')
         title_sec['style'] = (
             "width: 100%; "
-            "color: #ffffff; "
+            "color: #ffffff !important; "
             "font-size: 15px; "
             "font-weight: bold; "
             "line-height: 1.4; "
-            "letter-spacing: 0.3px; "
+            "letter-spacing: 0.5px; "
             "text-align: left; "
+            "text-shadow: 0 2px 4px rgba(0,0,0,0.9); "
             "overflow: hidden; "
             "text-overflow: ellipsis; "
             "white-space: nowrap; "
             "display: block;"
         )
         title_sec.string = item.get('title', '')
-        card_sec.append(title_sec)
+        overlay_sec.append(title_sec)
 
+        card_sec.append(overlay_sec)
         a_tag.append(card_sec)
         rec_div.append(a_tag)
 
@@ -1032,14 +1109,46 @@ def build_recommendations_section(soup, project_config, input_dir, metadata):
 
 def replace_recommendations_placeholder(soup, project_config, input_dir, metadata):
     """
-    Finds placeholder texts like {{往期推荐}} or {{往期精彩推荐}} and removes them cleanly.
+    Finds placeholder texts like {{往期推荐}} or {{往期精彩推荐}} and replaces them in-place with the section.
+    If no placeholder is in body text but metadata has recommendations, auto-inserts before disclaimer.
     """
+    target_node = None
+    placeholder_text = None
     for text_node in list(soup.find_all(string=True)):
         if "{{往期推荐}}" in text_node or "{{往期精彩推荐}}" in text_node:
-            parent = text_node.parent
-            text_node.extract()
+            target_node = text_node
+            if "{{往期推荐}}" in text_node:
+                placeholder_text = "{{往期推荐}}"
+            else:
+                placeholder_text = "{{往期精彩推荐}}"
+            break
+
+    rec_div = build_recommendations_section(soup, project_config, input_dir, metadata)
+
+    if target_node:
+        if not rec_div:
+            parent = target_node.parent
+            target_node.extract()
             if parent and not parent.get_text().strip() and parent.name in ('p', 'div', 'section'):
                 parent.extract()
+            return
+
+        parent = target_node.parent
+        if parent and parent.name in ('p', 'div', 'section') and len(parent.get_text().strip()) == len(placeholder_text):
+            parent.replace_with(rec_div)
+        else:
+            target_node.replace_with(rec_div)
+    elif rec_div:
+        # Auto-insert when placeholder is omitted from Markdown body text
+        disclaimer = None
+        for elem in soup.find_all(['p', 'section', 'div']):
+            if "【免责声明】" in elem.get_text():
+                disclaimer = elem
+                break
+        if disclaimer:
+            disclaimer.insert_before(rec_div)
+        else:
+            soup.append(rec_div)
 
 
 def build_qrcode_section(soup, project_config, input_dir, metadata):
@@ -1058,7 +1167,7 @@ def build_qrcode_section(soup, project_config, input_dir, metadata):
             qr_src = resolver.resolve_image_src(qrcode_image)
         else:
             qr_src = qrcode_image
-    elif qrcode_url:
+    elif qrcode_url and "sample_qrcode" not in qrcode_url and not qrcode_url.startswith('#'):
         # Generate custom QR code using online API
         encoded_url = urllib.parse.quote(qrcode_url, safe='')
         api_url = f"https://api.qrserver.com/v1/create-qr-code/?size=180x180&data={encoded_url}"
@@ -1084,7 +1193,7 @@ def build_qrcode_section(soup, project_config, input_dir, metadata):
         # Default fallback: Use the static QR code of the Official Account
         from .compiler import ImageResolver
         resolver = ImageResolver(project_config, input_dir=input_dir)
-        qr_src = resolver.resolve_image_src("img://二维码")
+        qr_src = resolver.resolve_image_src("img://弹壳呱呱微信公众号二维码")
 
     # Get author name for display (default to 弹壳呱呱)
     author_name = metadata.get('author') or project_config.get('author') or "弹壳呱呱"
@@ -1169,6 +1278,7 @@ def build_qrcode_section(soup, project_config, input_dir, metadata):
 def replace_qrcode_placeholder(soup, project_config, input_dir, metadata):
     """
     Finds placeholder {{扫码获取更多精彩}} and replaces it in-place with the QR code section.
+    If no placeholder is in body text, auto-inserts before disclaimer.
     """
     target_node = None
     placeholder_text = None
@@ -1178,23 +1288,33 @@ def replace_qrcode_placeholder(soup, project_config, input_dir, metadata):
             placeholder_text = "{{扫码获取更多精彩}}"
             break
 
-    if not target_node:
-        return
-
     qr_div = build_qrcode_section(soup, project_config, input_dir, metadata)
-    if not qr_div:
-        # Cleanup placeholder
-        parent = target_node.parent
-        target_node.extract()
-        if parent and not parent.get_text().strip() and parent.name in ('p', 'div'):
-            parent.extract()
-        return
 
-    parent = target_node.parent
-    if parent and parent.name in ('p', 'div') and len(parent.get_text().strip()) == len(placeholder_text):
-        parent.replace_with(qr_div)
-    else:
-        target_node.replace_with(qr_div)
+    if target_node:
+        if not qr_div:
+            # Cleanup placeholder
+            parent = target_node.parent
+            target_node.extract()
+            if parent and not parent.get_text().strip() and parent.name in ('p', 'div'):
+                parent.extract()
+            return
+
+        parent = target_node.parent
+        if parent and parent.name in ('p', 'div') and len(parent.get_text().strip()) == len(placeholder_text):
+            parent.replace_with(qr_div)
+        else:
+            target_node.replace_with(qr_div)
+    elif qr_div:
+        # Auto-insert when placeholder is omitted from Markdown body text
+        disclaimer = None
+        for elem in soup.find_all(['p', 'section', 'div']):
+            if "【免责声明】" in elem.get_text():
+                disclaimer = elem
+                break
+        if disclaimer:
+            disclaimer.insert_before(qr_div)
+        else:
+            soup.append(qr_div)
 
 
 def convert_to_wechat_html(md_content, project_config, input_dir=None):
@@ -1323,6 +1443,12 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
             td.append(span_tag)
             for node in remaining_nodes:
                 td.append(node)
+
+    # Format inline <a> text links with WeChat-friendly high contrast blue style
+    for a_elem in soup.find_all('a'):
+        if not a_elem.find(['section', 'div', 'img']):
+            existing_style = a_elem.get('style', '')
+            a_elem['style'] = "color: #2563eb; font-weight: bold; text-decoration: underline; -webkit-tap-highlight-color: transparent; " + existing_style
 
     # Replace recommendations placeholder in-place with the section if present
     replace_recommendations_placeholder(soup, project_config, input_dir, metadata)

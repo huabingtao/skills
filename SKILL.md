@@ -37,7 +37,8 @@ description: 专为《弹壳特攻队》攻略提供一键美化排版与微信�
 ---
 
 ### 阶段四：发布至微信公众号 (WeChat Draft Publishing)
-1. **草稿生成**：在后台调用 `scripts/publish.py` 自动上传文章中的本地图片素材，并通过 MD5 缓存去重，最终在公众号后台创建草稿。
+1. **草稿生成与缓存优先覆盖**：在后台调用 `scripts/publish.py -c <_wechat.html>` 自动上传文章中的本地图片素材，并通过 MD5 缓存去重。全流程默认读取本地 `.wechat_draft_cache.json` 中的 `MediaID` 覆盖更新已有草稿，防止微信后台产生重复冗余草稿；仅在明确指定 `--new` 时创建全新草稿。
+
 
 ---
 

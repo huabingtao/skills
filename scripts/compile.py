@@ -51,6 +51,15 @@ def load_project_config(pack_dir, theme_override=None):
         if os.path.exists(rules_path):
             project_config["highlight_rules_path"] = rules_path
 
+    # Links map
+    links_map_path = os.path.join(pack_abs, "config", "links_map.json")
+    if os.path.exists(links_map_path):
+        try:
+            with open(links_map_path, "r", encoding="utf-8") as f:
+                project_config["links_map"] = json.load(f)
+        except Exception as e:
+            print(f"⚠ Warning: Failed to load links_map.json: {e}")
+
     # Theme: override > pack config > default (minimal as default)
     theme_name = theme_override or config.get("theme", "minimal")
     themes_dir = os.path.join(PROJECT_ROOT, "themes")
@@ -120,8 +129,14 @@ def main():
         project_config = load_project_config(args.pack, args.theme)
         print("📦 Using content pack: " + str(args.pack))
     else:
-        project_config = build_default_config(args.theme)
-        print("ℹ No content pack specified, using pure layout mode")
+        default_pack = os.path.join(PROJECT_ROOT, "packs", "danke")
+        if os.path.exists(default_pack):
+            project_config = load_project_config(default_pack, args.theme)
+            print("📦 Auto-detected default content pack: packs/danke")
+        else:
+            project_config = build_default_config(args.theme)
+            print("ℹ No content pack specified, using pure layout mode")
+
 
     try:
         with open(input_path, "r", encoding="utf-8") as f:
