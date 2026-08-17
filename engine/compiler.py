@@ -1025,8 +1025,10 @@ def build_recommendations_section(soup, project_config, input_dir, metadata):
 
     rec_div.append(title_div)
 
+    import random
     resolver = ImageResolver(project_config, input_dir=input_dir)
     valid_illustration_indices = list(range(1, 10))
+    random.shuffle(valid_illustration_indices)
 
     # Render HTML/CSS Cards with 往期精彩插图 (1..9) background image & WeChat-editor-safe overlay
     for idx, item in enumerate(recs):
@@ -1035,10 +1037,10 @@ def build_recommendations_section(soup, project_config, input_dir, metadata):
         a_tag['target'] = "_blank"
         a_tag['style'] = "text-decoration: none; display: block; margin-bottom: 22px; -webkit-tap-highlight-color: transparent;"
 
-        # Pick illustration strictly from valid set [1, 3, 4, 5] (skipping 2 due to bad aspect ratio)
+        # Pick random illustration from valid set (1..9)
         pic_idx = valid_illustration_indices[idx % len(valid_illustration_indices)]
         img_name = f"img://往期精彩插图{pic_idx}"
-        bg_src = resolver.resolve_image_src(item.get('image') or img_name)
+        bg_src = resolver.resolve_image_src(img_name)
 
         card_sec = soup.new_tag('section')
         card_sec['style'] = (
