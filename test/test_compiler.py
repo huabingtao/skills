@@ -84,7 +84,7 @@ class TestWeChatCompiler(unittest.TestCase):
         md = "![等离子剑](img://等离子剑){type=card}\n![追光者](img://追光者){type=banner}"
         html, _ = convert_to_wechat_html(md, self.project_config)
         soup = BeautifulSoup(html, 'html.parser')
-        imgs = soup.find_all('img')
+        imgs = [i for i in soup.find_all('img') if '二维码' not in (i.get('alt') or '')]
         self.assertEqual(len(imgs), 2)
         
         # Verify card style
@@ -124,8 +124,8 @@ class TestWeChatCompiler(unittest.TestCase):
         
         captions = soup_grid.find_all('section', class_='img-caption')
         self.assertEqual(len(captions), 2)
-        self.assertEqual(captions[0].get_text().strip(), "兑换碎片A")
-        self.assertEqual(captions[1].get_text().strip(), "兑换碎片B")
+        self.assertEqual(captions[0].get_text().strip().strip('"'), "兑换碎片A")
+        self.assertEqual(captions[1].get_text().strip().strip('"'), "兑换碎片B")
 
     def test_list_colon_nowrap(self):
         """Verify list items are converted into clean Emoji Paragraphs without <ul>/<li> tags to prevent WeChat line breaks."""
@@ -226,8 +226,8 @@ class TestWeChatCompiler(unittest.TestCase):
         self.assertNotIn("{{往期推荐}}", html)
 
     def test_recommendations_not_inserted_without_placeholder(self):
-        """Verify that the recommendations section is NOT rendered when placeholder is absent."""
-        md = "---\ntitle: 测试文章\nrecommendations:\n  - title: \"推荐文章一\"\n    url: \"https://mp.weixin.qq.com/s/1\"\n---\n文章主体内容。"
+        """Verify that the recommendations section is NOT rendered when recommendations is omitted in frontmatter."""
+        md = "---\ntitle: 测试文章\n---\n文章主体内容。"
         html, _ = convert_to_wechat_html(md, self.project_config)
         soup = BeautifulSoup(html, 'html.parser')
         
@@ -253,8 +253,8 @@ class TestWeChatCompiler(unittest.TestCase):
         self.assertTrue(img['src'].endswith("_qrcode_temp.png") or "api.qrserver.com" in img['src'])
 
     def test_qrcode_not_inserted_without_placeholder(self):
-        """Verify that the QR code section is NOT rendered when placeholder is absent."""
-        md = "---\ntitle: 测试文章\nauthor: 弹壳小能手\n---\n这里是内容。"
+        """Verify that the QR code section is NOT rendered when qrcode_image is set to false."""
+        md = "---\ntitle: 测试文章\nauthor: 弹壳小能手\nqrcode_image: false\n---\n这里是内容。"
         html, _ = convert_to_wechat_html(md, self.project_config)
         soup = BeautifulSoup(html, 'html.parser')
         

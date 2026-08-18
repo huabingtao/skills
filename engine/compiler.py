@@ -1162,6 +1162,9 @@ def build_qrcode_section(soup, project_config, input_dir, metadata):
     
     qrcode_image = metadata.get('qrcode_image')
     qrcode_url = metadata.get('qrcode_url')
+
+    if qrcode_image is False or (isinstance(qrcode_image, str) and qrcode_image.lower() in ('false', 'off')):
+        return None
     
     if qrcode_image:
         if qrcode_image.startswith('img://'):
