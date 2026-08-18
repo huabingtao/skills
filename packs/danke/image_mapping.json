@@ -99,7 +99,6 @@
   "传奇收藏品宝箱": "assets/img/宝箱/传奇收藏品宝箱.png",
   "传奇收藏品白羊座星辉": "assets/img/收藏品/传奇收藏品/第10期/白羊座星辉.png",
   "传奇收藏品箱": "assets/img/宝箱/传奇收藏品宝箱.png",
-  "传奇收藏品解构机": "assets/img/传奇收藏品结构机.png",
   "传奇收藏品结构机": "assets/img/传奇收藏品结构机.png",
   "传奇配件自选": "assets/img/宝箱/传奇配件自选宝箱.png",
   "传奇配件自选宝箱": "assets/img/宝箱/传奇配件自选宝箱.png",
@@ -429,6 +428,7 @@
   "马头像": "assets/img/道具/末世战马头像.png",
   "异世宠物自选宝箱": "assets/img/宝箱/异世宠物自选宝箱.png",
   "异世宠物自选礼包": "assets/img/宝箱/异世宠物自选宝箱.png",
+  "异宠自选宝箱": "assets/img/宝箱/异世宠物自选宝箱.png",
   "马碎片": "assets/img/碎片/末世战马碎片.png",
   "高宠物箱钥匙": "assets/img/钥匙/高级宠物箱钥匙.png",
   "高收藏之心": "assets/img/道具/高级收藏之心.png",
@@ -448,5 +448,11 @@
   "黄金之瞳": "assets/img/收藏品/史诗收藏品/黄金之瞳.png",
   "黄金号角": "assets/img/收藏品/史诗收藏品/第4期/黄金号角.png",
   "黄金餐具": "assets/img/收藏品/史诗收藏品/第1期/黄金餐具.png",
-  "龙牙": "assets/img/收藏品/传奇收藏品/第9期/龙牙.png"
+  "龙牙": "assets/img/收藏品/传奇收藏品/第9期/龙牙.png",
+  "💎": "assets/img/道具/钻石.png",
+  "🎯": "assets/img/道具/神炼核心.png",
+  "📋": "assets/img/宝箱/核心自选宝箱.png",
+  "📦": "assets/img/宝箱/s级杰出装备自选宝箱.png",
+  "🛒": "assets/img/道具/神炼核心.png",
+  "抽奖券": "assets/img/道具/神炼核心.png"
 }

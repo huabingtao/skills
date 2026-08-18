@@ -877,26 +877,27 @@ def wrap_wechat_html(final_html, project_config):
 def build_recommendations_section(soup, project_config, input_dir, metadata):
     """
     Builds the beautiful '往期精彩推荐' (Past Recommendations) section tag.
+    Only generates section if metadata explicitly contains recommendations.
     """
-    recs = []
-
-    # 1. Check if explicit recommendations exist in metadata
     explicit_recs = metadata.get('recommendations')
-    if explicit_recs:
-        for item in explicit_recs:
-            if isinstance(item, dict):
-                recs.append({
-                    "title": item.get("title", ""),
-                    "url": item.get("url", "#")
-                })
-            elif isinstance(item, str):
-                recs.append({
-                    "title": item,
-                    "url": "#"
-                })
+    if not explicit_recs or not isinstance(explicit_recs, list) or len(explicit_recs) == 0:
+        return None
 
-    # 2. If no explicit recommendations, automatically scan siblings
-    if not recs and input_dir:
+    recs = []
+    for item in explicit_recs:
+        if isinstance(item, dict):
+            recs.append({
+                "title": item.get("title", ""),
+                "url": item.get("url", "#")
+            })
+        elif isinstance(item, str):
+            recs.append({
+                "title": item,
+                "url": "#"
+            })
+
+    if not recs:
+        return None
         content_root = None
         curr_dir = os.path.abspath(input_dir)
         for _ in range(5):
