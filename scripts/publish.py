@@ -160,17 +160,28 @@ class DouYinDraftNote(DouYinNote):
         self.keep_open = keep_open
 
     async def upload_note_content(self, page) -> None:
+        # 0. 页面登录状态拦截检查：若页面跳入登录或弹出登录弹窗，立即中断并提示扫码
+        await page.wait_for_timeout(1500)
+        has_login_markers = (await page.get_by_text("扫码登录").count() > 0) or (await page.get_by_text("手机号登录").count() > 0)
+        has_upload_tab = (await page.get_by_text("发布图文").count() > 0) or (await page.locator("div[class*='tab']:has-text('发布图文')").count() > 0)
+        if has_login_markers or not has_upload_tab:
+            douyin_logger.error("❌ 检测到页面处于未登录状态，已终止发布，请等待用户扫码！")
+            raise RuntimeError("LOGIN_REQUIRED: 页面要求登录，请重新扫码")
+
         douyin_logger.info("🏃 [Patchright] 正在准备上传抖音图文...")
+
 
         # 1. 明确等待并点击‘发布图文’ Tab
         douyin_logger.info("🔀 正在切换至‘发布图文’Tab...")
         try:
             tab_post = page.get_by_text("发布图文", exact=True).first
-            await tab_post.wait_for(state="visible", timeout=15000)
-            await tab_post.click()
+            if await tab_post.count() == 0:
+                tab_post = page.locator("div[class*='tab']:has-text('发布图文')").first
+            await tab_post.click(timeout=6000)
             await page.wait_for_timeout(1500)
         except Exception as e:
             douyin_logger.warning(f"切换发布图文Tab提醒: {e}")
+
 
         # 2. 清理‘放弃’未完成草稿提示
         try:
@@ -185,7 +196,15 @@ class DouYinDraftNote(DouYinNote):
         # 3. 精准注入图片文件至 input[accept*='image']
         douyin_logger.info("📤 精准注入图文图片文件序列...")
         file_inputs = page.locator("input[type='file']")
-        await file_inputs.first.wait_for(state="attached", timeout=15000)
+        try:
+            await file_inputs.first.wait_for(state="attached", timeout=8000)
+        except Exception:
+            # 再次检查是否因未登录导致无上传输入框
+            if "login" in page.url or await page.locator("text='扫码登录'").count() > 0:
+                douyin_logger.error("❌ 未检测到上传输入框（页面处于未登录状态），请扫码登录！")
+                raise RuntimeError("LOGIN_REQUIRED: 页面未登录")
+            raise
+
 
         uploaded = False
         cnt = await file_inputs.count()
@@ -292,8 +311,9 @@ class DouYinDraftNote(DouYinNote):
         except Exception:
             pass
 
-        douyin_logger.info("🔒 遵照用户要求，上传抖音草稿箱完成后保持浏览器开启 600 秒 (10分钟) 供观察与编辑...")
-        await asyncio.sleep(600)
+        douyin_logger.info("🔒 遵照用户要求，上传抖音草稿箱完成后保持浏览器开启（无限挂起），严禁关闭浏览器...")
+        while True:
+            await asyncio.sleep(3600)
 
 
 # ─────────────────────────── CLI Entry Point ─────────────────────────────
@@ -308,8 +328,10 @@ def main():
     parser.add_argument("--title", help="覆盖标题 (≤20字)")
     parser.add_argument("--cover", help="覆盖竖版封面图路径")
     parser.add_argument("--login", action="store_true", help="启动 Patchright 浏览器扫码登录抖音")
-    parser.add_argument("--headed", action="store_true", help="使用有头浏览器界面")
-    parser.add_argument("--keep-open", action="store_true", help="上传后保持浏览器开启不立即关闭")
+    parser.add_argument("--headless", action="store_true", default=True, help="使用无头浏览器模式 (默认 True)")
+    parser.add_argument("--headed", action="store_false", dest="headless", help="使用有头可视化窗口模式")
+    parser.add_argument("--no-keep-open", action="store_true", help="上传完成后自动关闭浏览器 (默认保持开启不关闭)")
+
 
     args = parser.parse_args()
 
@@ -325,8 +347,20 @@ def main():
             print(f"❌ 登录未完成: {res.get('message')}")
         return
 
+    # 自动前置检查 Cookie 有效性，若失效则拉起扫码登录，登录失败则立刻终止
+    valid_login = asyncio.run(douyin_setup(str(account_file), handle=False))
+    if not valid_login:
+        print(f"\n⚠️ 检测到抖音登录凭证 (Cookie) 已失效或不存在！")
+        print("🔑 正在拉起浏览器扫码登录，请使用抖音 App 扫码...")
+        login_res = asyncio.run(douyin_setup(str(account_file), handle=True, headless=False, return_detail=True))
+        if not login_res.get("success"):
+            print(f"❌ 扫码登录未完成 ({login_res.get('message', '用户未扫码或超时')})，已终止后续发布操作！")
+            return
+        print("🎉 抖音扫码登录成功！Cookie 已更新，继续执行发布流程...\n")
+
     if not args.images or not args.metadata:
         parser.error("发布模式需要同时指定 -i (切图目录) 和 -m (元数据文件)")
+
 
     meta_path = os.path.abspath(args.metadata)
     meta = load_metadata(meta_path)
@@ -357,14 +391,37 @@ def main():
         account_file=str(account_file),
         title=title,
         publish_strategy=DOUYIN_PUBLISH_STRATEGY_IMMEDIATE,
-        headless=not args.headed,
-        keep_open=args.keep_open,
+        headless=args.headless,
+        keep_open=not args.no_keep_open,
     )
 
     print("\n🚀 正在通过 Patchright 引擎上传至抖音草稿箱...")
-    asyncio.run(uploader.douyin_upload_note())
-    print("✨ 抖音草稿箱上传程序完成！")
+    try:
+        asyncio.run(uploader.douyin_upload_note())
+        print("✨ 抖音草稿箱上传程序完成！")
+    except Exception as e:
+        if "LOGIN_REQUIRED" in str(e) or "cookie文件已失效" in str(e) or "cookie文件不存在" in str(e):
+            print("\n⚠️ 检测到抖音登录状态异常，已立即暂停发布流程！")
+            print("🔑 正在拉起扫码登录窗口，请使用抖音 App 扫码...")
+            login_res = asyncio.run(douyin_setup(str(account_file), handle=True, headless=False, return_detail=True))
+            if login_res.get("success"):
+                print("🎉 抖音扫码登录成功！已为您更新 Cookie。请重新执行一次发布命令即可！")
+            else:
+                print(f"❌ 扫码登录未完成 ({login_res.get('message', '用户未扫码或已取消')})，已终止所有后续操作。")
+            return
+        raise
+
+
+    if not args.no_keep_open:
+        print("🔒 [驻留保活] 遵照用户要求，浏览器窗口已在屏幕上保持开启（程序挂起中，按 Ctrl+C 可退出）...")
+        import time
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            print("\n👋 已关闭浏览器。")
 
 
 if __name__ == "__main__":
     main()
+

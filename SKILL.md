@@ -46,8 +46,10 @@ pip install patchright requests pillow pyyaml
 python3 -m patchright install chromium
 ```
 
-## Cookie 持久化 (集中式)
+## Cookie 持久化与过期自动扫码机制
 
-- 首次运行 `--login` 打开有头浏览器扫码登录
-- Cookie 统一集中保存至 `deps/social-auto-upload/cookies/douyin_uploader/account.json`
-- 后续静默上传自动加载 Cookie 并存草稿箱
+- 脚本在发布前会自动前置检测 Cookie 有效性：
+  - **Cookie 有效**：直接进行静默无感知上传与草稿保存；
+  - **Cookie 过期/失效**：自动触发自动登录逻辑或暂停发布并弹出扫码窗口，提示用户使用抖音 App 扫码更新凭证；若登录未完成则立即中断终止后续操作，绝不带着失效状态强行操作。
+- 也可以随时通过 `python3 scripts/publish.py --login` 主动扫码更新 Cookie。
+- Cookie 统一集中保存至 `deps/social-auto-upload/cookies/douyin_uploader/account.json`。
