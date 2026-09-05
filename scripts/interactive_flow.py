@@ -165,7 +165,43 @@ def run_stage_3(input_path, output_path, project_config):
             json.dump(metadata, f, ensure_ascii=False, indent=2, default=json_serial)
 
     print("✔ HTML 编译与 CSS 行内合并完成")
+    
+    # 统计正文字数并评估公众号文中广告档位
+    wc = get_article_word_count(content)
+    tier_msg = format_ad_tier_status(wc)
+    print(f"  {tier_msg}")
+    
     return True
+
+
+def get_article_word_count(text: str) -> int:
+    """计算文章纯正文字数 (去除 Frontmatter、HTML标签、图片链接及宏语法)"""
+    if text.startswith("---"):
+        parts = re.split(r"^---", text, maxsplit=2, flags=re.MULTILINE)
+        if len(parts) >= 3:
+            text = parts[2]
+    clean = re.sub(r'<[^>]+>', '', text)
+    clean = re.sub(r'!\[.*?\]\(.*?\)', '', clean)
+    clean = re.sub(r'\[(.*?)\]\(.*?\)', r'\1', clean)
+    clean = re.sub(r'\{\{.*?\}\}', '', clean)
+    zh_chars = len(re.findall(r'[\u4e00-\u9fa5]', clean))
+    en_words = len(re.findall(r'[a-zA-Z0-9]+', clean))
+    return zh_chars + en_words
+
+
+def format_ad_tier_status(word_count: int) -> str:
+    if word_count <= 250:
+        return f"📊 文章字数: {word_count} 字 [档位一: 1~200字 · 极短快讯/竞猜档 (无文中广告)]"
+    elif 500 <= word_count <= 700:
+        return f"📊 文章字数: {word_count} 字 [档位二: 550~600字 · 单条文中广告黄金档 ⭐ (稳定支持 1 条文中广告)]"
+    elif 900 <= word_count <= 1350:
+        return f"📊 文章字数: {word_count} 字 [档位三: 950~1200字 · 双条文中广告深度档 ⭐⭐ (稳定支持 2 条文中广告)]"
+    elif 250 < word_count < 500:
+        return f"📊 文章字数: {word_count} 字 [提示: 略低于 1 条广告基准线 (550字)，如需插入广告建议微调充实]"
+    elif 700 < word_count < 900:
+        return f"📊 文章字数: {word_count} 字 [提示: 处于单条与双条广告过渡区间，支持 1 条广告，如需双广告建议充实至 950+ 字]"
+    else:
+        return f"📊 文章字数: {word_count} 字 [超长深度长文 · 稳定支持 2 条以上文中广告]"
 
 
 def main():

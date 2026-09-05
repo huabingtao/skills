@@ -81,5 +81,26 @@ class TestInteractiveFlow(unittest.TestCase):
             main()  # No SystemExit expected; no publish call expected
 
 
+    def test_word_count_and_ad_tier_evaluation(self):
+        from scripts.interactive_flow import get_article_word_count, format_ad_tier_status
+        sample_short = "---\ntitle: test\n---\n这是一段非常短的快讯通知，字数在五十个字左右。"
+        wc1 = get_article_word_count(sample_short)
+        self.assertTrue(wc1 < 100)
+        self.assertIn("档位一", format_ad_tier_status(wc1))
+
+        sample_550 = "弹壳特攻队攻略测试测试。" * 55  # 11 * 55 = 605 chars
+        wc2 = get_article_word_count(sample_550)
+        self.assertTrue(500 <= wc2 <= 700)
+        self.assertIn("档位二", format_ad_tier_status(wc2))
+        self.assertIn("1 条文中广告", format_ad_tier_status(wc2))
+
+        sample_1000 = "特工载具配件深度测试测试。" * 95  # 11 * 95 = 1045 chars
+        wc3 = get_article_word_count(sample_1000)
+        self.assertTrue(900 <= wc3 <= 1200)
+        self.assertIn("档位三", format_ad_tier_status(wc3))
+        self.assertIn("2 条文中广告", format_ad_tier_status(wc3))
+
+
 if __name__ == "__main__":
     unittest.main()
+
