@@ -83,17 +83,26 @@ def apply_image_node_styles(img, params, soup=None):
     height_val = params.get('h') or params.get('height')
     caption_text = params.get('caption')
 
+    def format_dim(val, default='90%'):
+        if not val:
+            return default
+        val_str = str(val).strip()
+        if val_str.isdigit():
+            num = int(val_str)
+            return f"{num}%" if num <= 100 else f"{num}px"
+        return val_str
+
     if img_type == 'card':
-        inline_style = "display: block; margin: 20px auto; width: 90%; max-width: 100%; border-radius: 12px; box-shadow: 0 10px 20px rgba(0,0,0,0.1); border: 1px solid #eee;"
+        w_str = format_dim(width_val, '90%')
+        inline_style = "display: block; margin: 20px auto; width: " + str(w_str) + "; max-width: 100%; border-radius: 12px; box-shadow: 0 10px 20px rgba(0,0,0,0.1); border: 1px solid #eee;"
+        if height_val:
+            h_str = format_dim(height_val, 'auto')
+            inline_style += " height: " + str(h_str) + ";"
     elif img_type == 'center':
-        w_str = width_val or 'auto'
-        if w_str.isdigit():
-            w_str += 'px'
+        w_str = format_dim(width_val, 'auto')
         inline_style = "display: block; margin: 20px auto; width: " + str(w_str) + "; max-width: 100%;"
         if height_val:
-            h_str = height_val
-            if h_str.isdigit():
-                h_str += 'px'
+            h_str = format_dim(height_val, 'auto')
             inline_style += " height: " + str(h_str) + ";"
     elif img_type == 'banner':
         inline_style = "display: block; margin: 20px auto; width: 100%; max-width: 100%; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.08);"
@@ -672,33 +681,40 @@ def convert_lists_to_emoji_paragraphs(soup):
     """
     Converts <ul> / <ol> lists into clean Emoji Paragraphs (<p>) to completely bypass
     WeChat mobile client auto-injecting native list bullet points (•) or empty <li> items.
+    Unwraps any internal <p> tags inside <li> to avoid nested <p> tags causing line breaks.
     """
     for list_tag in list(soup.find_all(['ul', 'ol'])):
         paragraphs = []
-        for li in list_tag.find_all('li'):
+        for li in list_tag.find_all('li', recursive=False):
             text = li.get_text(strip=True)
             if not text and not li.find_all('img'):
                 continue
-            
+
             p = soup.new_tag('p')
             p['style'] = 'margin: 15px 0; line-height: 1.8; color: #333333; font-size: 16px; text-align: justify; word-break: break-word;'
-            
+
             has_emoji = False
             if text and is_emoji_char(text[0]):
                 has_emoji = True
-            
+
             if not has_emoji:
                 emoji_str = "🔹 "
                 p.append(soup.new_string(emoji_str))
-                
+
+            # Flatten/unwrap any child <p> inside <li> so that the paragraph content flows inline
             for child in list(li.contents):
-                p.append(child)
+                if getattr(child, 'name', None) == 'p':
+                    for inner in list(child.contents):
+                        p.append(inner)
+                else:
+                    p.append(child)
             paragraphs.append(p)
-            
+
         if paragraphs:
             for p in reversed(paragraphs):
                 list_tag.insert_after(p)
             list_tag.decompose()
+
 
 
 def _move_colon_into_strong(soup, target):
