@@ -133,7 +133,7 @@ def run_stage_2(input_path, output_path, image_mapping_path):
     return True
 
 
-def run_stage_3(input_path, output_path, project_config):
+def run_stage_3(input_path, output_path, project_config, source_dir=None):
     print("\n🚀 [Stage 3/4] 正在编译微信 HTML...")
     if not os.path.exists(input_path):
         print(f"❌ Error: Stage 2 file not found: {input_path}")
@@ -142,10 +142,20 @@ def run_stage_3(input_path, output_path, project_config):
     with open(input_path, "r", encoding="utf-8") as f:
         content = f.read()
 
-    input_dir = os.path.dirname(os.path.abspath(input_path))
+    input_dir = source_dir or os.path.dirname(os.path.abspath(input_path))
+    if os.path.basename(input_dir) == "dist":
+        input_dir = os.path.dirname(input_dir)
     local_config = project_config.copy()
     local_config["highlight_rules_path"] = None
     wechat_html, metadata = convert_to_wechat_html(content, local_config, input_dir=input_dir)
+    # Metadata travels with dist HTML; local covers must remain resolvable there.
+    for key in ("cover", "image", "cover_vertical"):
+        value = metadata.get(key)
+        if isinstance(value, str) and not value.startswith(("http://", "https://", "data:", "img://")):
+            candidate = os.path.abspath(os.path.join(input_dir, value))
+            if os.path.isfile(candidate):
+                metadata[key] = candidate
+
 
     # Ensure the output parent directory exists
     ensure_output_directory(output_path)
@@ -190,16 +200,16 @@ def get_article_word_count(text: str) -> int:
 
 
 def format_ad_tier_status(word_count: int) -> str:
-    if word_count <= 250:
-        return f"📊 文章字数: {word_count} 字 [档位一: 1~200字 · 极短快讯/竞猜档 (无文中广告)]"
-    elif 500 <= word_count <= 700:
-        return f"📊 文章字数: {word_count} 字 [档位二: 550~600字 · 单条文中广告黄金档 ⭐ (稳定支持 1 条文中广告)]"
-    elif 900 <= word_count <= 1350:
-        return f"📊 文章字数: {word_count} 字 [档位三: 950~1200字 · 双条文中广告深度档 ⭐⭐ (稳定支持 2 条文中广告)]"
-    elif 250 < word_count < 500:
-        return f"📊 文章字数: {word_count} 字 [提示: 略低于 1 条广告基准线 (550字)，如需插入广告建议微调充实]"
-    elif 700 < word_count < 900:
-        return f"📊 文章字数: {word_count} 字 [提示: 处于单条与双条广告过渡区间，支持 1 条广告，如需双广告建议充实至 950+ 字]"
+    if word_count <= 350:
+        return f"📊 文章字数: {word_count} 字 [档位一: 1~300字 · 极短快讯/竞猜档 (无文中广告)]"
+    elif 480 <= word_count <= 720:
+        return f"📊 文章字数: {word_count} 字 [档位二: 550字左右 · 单条文中广告黄金档 ⭐ (稳定支持 1 条文中广告)]"
+    elif 780 <= word_count <= 1150:
+        return f"📊 文章字数: {word_count} 字 [档位三: 850字左右 · 双条文中广告深度档 ⭐⭐ (稳定支持 2 条文中广告)]"
+    elif 350 < word_count < 480:
+        return f"📊 文章字数: {word_count} 字 [提示: 略低于 1 条广告基准线 (~550字)，如需插入广告建议微调充实]"
+    elif 720 < word_count < 780:
+        return f"📊 文章字数: {word_count} 字 [提示: 处于单条与双条广告过渡区间，支持 1 条广告，如需双广告建议充实至 850+ 字]"
     else:
         return f"📊 文章字数: {word_count} 字 [超长深度长文 · 稳定支持 2 条以上文中广告]"
 
@@ -230,13 +240,16 @@ def main():
     highlight_rules_path = project_config.get("highlight_rules_path")
     image_mapping_path = project_config.get("image_mapping_path")
 
-    # Determine stage paths
+    # Determine stage paths (Auto-isolated in dist/ directory)
     base_dir = os.path.dirname(input_path)
     base_name = os.path.splitext(os.path.basename(input_path))[0]
     
-    stage1_path = os.path.join(base_dir, f"{base_name}_stage1.md")
-    stage2_path = os.path.join(base_dir, f"{base_name}_stage2.md")
-    stage3_path = os.path.join(base_dir, f"{base_name}_stage3_wechat.html")
+    dist_dir = os.path.join(base_dir, "dist")
+    os.makedirs(dist_dir, exist_ok=True)
+    
+    stage1_path = os.path.join(dist_dir, f"{base_name}_stage1.md")
+    stage2_path = os.path.join(dist_dir, f"{base_name}_stage2.md")
+    stage3_path = os.path.join(dist_dir, f"{base_name}_stage3_wechat.html")
 
     # ==================== STAGE 1 ====================
     run_stage_1(input_path, stage1_path, highlight_rules_path, image_mapping_path)
@@ -279,18 +292,18 @@ def main():
 
     # ==================== STAGE 3 ====================
     # Read from stage2_path to preserve manual edits
-    run_stage_3(stage2_path, stage3_path, project_config)
+    run_stage_3(stage2_path, stage3_path, project_config, source_dir=base_dir)
     if not args.yes:
         while True:
             ans = input(
                 f"\n➡️ [Stage 3] 微信 HTML 编译完成！文件已保存至:\n   {stage3_path}\n"
                 "   (您可以在浏览器或编辑器中查看和编辑生成的 HTML 效果)\n"
-                "   请输入操作: [y] 继续至 Stage 4 (发布公众号) | [r] 重新加载 Stage 2 文件重跑 Stage 3 | [q] 退出: "
+                "   请输入操作: [y] 完成排版并显示发布命令 | [r] 重新加载 Stage 2 文件重跑 Stage 3 | [q] 退出: "
             ).strip().lower()
             if ans in ('', 'y', 'yes'):
                 break
             elif ans == 'r':
-                run_stage_3(stage2_path, stage3_path, project_config)
+                run_stage_3(stage2_path, stage3_path, project_config, source_dir=base_dir)
             elif ans == 'q':
                 print("👋 已退出流程")
                 sys.exit(0)
@@ -300,11 +313,11 @@ def main():
     # ==================== STAGE 4 (已迁移) ====================
     # 微信发布能力已独立为 wechat-publisher-skill，请单独调用：
     #
-    #   python3 /Users/hbt/my-project/skills/wechat-publisher-skill/scripts/publish.py \
+    #   python3 /home/guagua/workspace/.agents/skills/wechat-publisher-skill/scripts/publish.py \
     #     -c <_wechat.html 路径>
     print(f"\n✅ [Stage 3] 完成！HTML 已保存至：\n   {stage3_path}")
     print("\n💡 如需发布到微信公众号草稿箱，请使用 wechat-publisher-skill：")
-    print(f"   python3 /Users/hbt/my-project/skills/wechat-publisher-skill/scripts/publish.py -c {stage3_path}")
+    print(f"   python3 /home/guagua/workspace/.agents/skills/wechat-publisher-skill/scripts/publish.py -c {stage3_path}")
 
 
 

@@ -37,8 +37,17 @@ def load_project_config(pack_dir, theme_override=None):
     # Resolve relative paths to absolute
     project_config = {}
 
-    # Image mapping
-    if config.get("image_mapping"):
+    # Image mapping：COS 模式下优先使用 image_mapping_cos.json
+    cos_mode = config.get("cos_mode", False)
+    if cos_mode and config.get("image_mapping_cos"):
+        cos_mapping_path = os.path.join(pack_abs, config["image_mapping_cos"])
+        if os.path.exists(cos_mapping_path):
+            project_config["image_mapping_path"] = cos_mapping_path
+            print("☁️  COS 模式：使用 image_mapping_cos.json")
+        else:
+            print("⚠ COS mapping 文件不存在，回退到本地 mapping")
+            cos_mode = False
+    if not cos_mode and config.get("image_mapping"):
         project_config["image_mapping_path"] = os.path.join(pack_abs, config["image_mapping"])
 
     # Assets directory

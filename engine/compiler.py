@@ -388,8 +388,12 @@ class ImageResolver:
 
         mapped_path = self.image_mapping.get(src_clean) or self.image_mapping.get(base_name) or self.image_mapping.get(key_name)
         file_path = None
-        if mapped_path and self.check_file_exists(mapped_path):
-            return self.relative_to_input_or_project(mapped_path)
+        if mapped_path:
+            # COS / HTTP URL：直接返回，跳过本地文件解析
+            if mapped_path.startswith(('http://', 'https://')):
+                return mapped_path
+            if self.check_file_exists(mapped_path):
+                return self.relative_to_input_or_project(mapped_path)
 
         if self.check_file_exists(src_clean):
             return self.relative_to_input_or_project(src_clean)
@@ -686,6 +690,10 @@ def convert_lists_to_emoji_paragraphs(soup):
     for list_tag in list(soup.find_all(['ul', 'ol'])):
         paragraphs = []
         for li in list_tag.find_all('li', recursive=False):
+            # Natural list entries must not regain bold during color conversion.
+            for bold in list(li.find_all(["strong", "b"])):
+                bold.unwrap()
+
             text = li.get_text(strip=True)
             if not text and not li.find_all('img'):
                 continue
@@ -892,7 +900,7 @@ def wrap_wechat_html(final_html, project_config):
 
 def build_recommendations_section(soup, project_config, input_dir, metadata):
     """
-    Builds the beautiful '往期精彩推荐' (Past Recommendations) section tag.
+    Builds the classic dashed-box '🌟 往期精彩推荐' section tag with 👉 items.
     Only generates section if metadata explicitly contains recommendations.
     """
     explicit_recs = metadata.get('recommendations')
@@ -914,213 +922,46 @@ def build_recommendations_section(soup, project_config, input_dir, metadata):
 
     if not recs:
         return None
-        content_root = None
-        curr_dir = os.path.abspath(input_dir)
-        for _ in range(5):
-            if os.path.basename(curr_dir) == 'my-articles-md':
-                content_root = curr_dir
-                break
-            if os.path.basename(curr_dir) == 'danke':
-                t_path = os.path.join(curr_dir, 'my-articles-md')
-                if os.path.exists(t_path):
-                    content_root = t_path
-                    break
-            # check sibling/child directories
-            t_path = os.path.join(curr_dir, 'content', 'danke', 'my-articles-md')
-            if os.path.exists(t_path):
-                content_root = t_path
-                break
-            parent = os.path.dirname(curr_dir)
-            if parent == curr_dir:
-                break
-            curr_dir = parent
-
-        if not content_root:
-            content_root = os.path.dirname(os.path.abspath(input_dir))
-
-        all_articles = []
-        if os.path.exists(content_root):
-            for root, dirs, files in os.walk(content_root):
-                dirs[:] = [d for d in dirs if not d.startswith('.') and d not in ('venv', 'node_modules', 'scripts')]
-                for file in files:
-                    if file.endswith('.md') and not file.endswith(('_wechat.html', '_preview.html')):
-                        full_path = os.path.join(root, file)
-                        try:
-                            with open(full_path, 'r', encoding='utf-8') as f:
-                                file_content = f.read()
-                            _, file_meta = extract_frontmatter(file_content)
-                            if file_meta and file_meta.get('title'):
-                                title = file_meta.get('title')
-                                if title == metadata.get('title'):
-                                    continue
-                                all_articles.append({
-                                    "title": title,
-                                    "path": full_path,
-                                    "date": file_meta.get('date', '')
-                                })
-                        except Exception:
-                            pass
-
-        # Sort: sibling files in the same directory/subcategory first
-        sibling_recs = []
-        other_recs = []
-        for art in all_articles:
-            art_dir = os.path.dirname(art["path"])
-            if os.path.dirname(art_dir) == os.path.dirname(os.path.abspath(input_dir)) or art_dir == os.path.abspath(input_dir):
-                sibling_recs.append(art)
-            else:
-                other_recs.append(art)
-
-        # Sort by date (descending)
-        sibling_recs.sort(key=lambda x: str(x.get('date') or ''), reverse=True)
-        other_recs.sort(key=lambda x: str(x.get('date') or ''), reverse=True)
-
-        selected = sibling_recs[:3]
-        if len(selected) < 3:
-            selected += other_recs[:3 - len(selected)]
-
-        # Extract image if available
-        for art in selected[:3]:
-            art_meta = {}
-            try:
-                with open(art["path"], 'r', encoding='utf-8') as f:
-                    _, art_meta = extract_frontmatter(f.read())
-            except Exception:
-                pass
-            recs.append({
-                "title": art["title"],
-                "url": "#",
-                "image": art_meta.get("image") or art_meta.get("cover") or art_meta.get("bg_image")
-            })
-
-    if not recs:
-        return None
-
-    # Default premium low-saturation dark gradients
-    default_gradients = [
-        "linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%)",  # Slate Dark
-        "linear-gradient(135deg, #18181b 0%, #27272a 50%, #3f3f46 100%)",  # Zinc Dark
-        "linear-gradient(135deg, #064e3b 0%, #047857 50%, #059669 100%)",  # Emerald Dark
-        "linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4338ca 100%)",  # Indigo Dark
-        "linear-gradient(135deg, #450a0a 0%, #7f1d1d 50%, #991b1b 100%)",  # Rose Dark
-        "linear-gradient(135deg, #132a13 0%, #31572c 50%, #4f772d 100%)"   # Olive Dark
-    ]
 
     rec_div = soup.new_tag('section')
-    rec_div['style'] = (
-        "margin: 30px auto 20px auto; "
-        "max-width: 100%; "
-        "box-sizing: border-box; "
-        "display: block;"
-    )
+    rec_div['style'] = "margin: 30px auto 20px auto; max-width: 360px; padding: 24px 20px; background-color: #f8fafc; border: 1px dashed #e2e8f0; border-radius: 12px; box-sizing: border-box; display: block;"
 
-    # Section Title / Header
-    title_div = soup.new_tag('section')
-    title_div['style'] = (
-        "font-weight: bold; "
-        "color: #1e293b; "
-        "font-size: 16px; "
-        "margin-bottom: 16px; "
-        "letter-spacing: 0.5px; "
-        "text-align: center; "
-        "display: block;"
-    )
+    # Section Title: 🌟 往期精彩推荐
+    title_sec = soup.new_tag('section')
+    title_sec['style'] = "font-weight: bold; color: #1e293b; font-size: 16px; margin-bottom: 16px; letter-spacing: 0.5px; text-align: center; display: block;"
 
-    t1 = soup.new_tag('span')
-    t1.string = "下方查看"
-    title_div.append(t1)
+    star_span = soup.new_tag('span')
+    star_span['style'] = "margin-right: 8px; font-size: 16px;"
+    star_span.string = "🌟"
+    title_sec.append(star_span)
 
-    t2 = soup.new_tag('span')
-    t2['style'] = "color: #2563eb; margin: 0 2px;"
-    t2.string = "往期精彩推荐"
-    title_div.append(t2)
+    title_span = soup.new_tag('span')
+    title_span.string = "往期精彩推荐"
+    title_sec.append(title_span)
 
-    t3 = soup.new_tag('span')
-    t3['style'] = "color: #2563eb;"
-    t3.string = "🔻"
-    title_div.append(t3)
+    rec_div.append(title_sec)
 
-    rec_div.append(title_div)
+    for item in recs:
+        title_text = item.get('title', '').strip()
+        if not title_text:
+            continue
 
-    import random
-    resolver = ImageResolver(project_config, input_dir=input_dir)
-    valid_illustration_indices = list(range(1, 10))
-    random.shuffle(valid_illustration_indices)
+        row_sec = soup.new_tag('section')
+        row_sec['style'] = "margin: 10px 0; font-size: 14px; text-align: left; display: block; line-height: 1.6;"
 
-    # Render HTML/CSS Cards with 往期精彩插图 (1..9) background image & WeChat-editor-safe overlay
-    for idx, item in enumerate(recs):
+        hand_span = soup.new_tag('span')
+        hand_span['style'] = "color: #ff4d4f; margin-right: 8px; font-size: 12px; line-height: 20px;"
+        hand_span.string = "👉"
+        row_sec.append(hand_span)
+
         a_tag = soup.new_tag('a')
         a_tag['href'] = item.get('url', '#') or '#'
         a_tag['target'] = "_blank"
-        a_tag['style'] = "text-decoration: none; display: block; margin-bottom: 22px; -webkit-tap-highlight-color: transparent;"
+        a_tag['style'] = "color: #ff4d4f; text-decoration: none; font-weight: bold; line-height: 20px; word-break: break-all;"
+        a_tag.string = title_text
+        row_sec.append(a_tag)
 
-        # Pick random illustration from valid set (1..9)
-        pic_idx = valid_illustration_indices[idx % len(valid_illustration_indices)]
-        img_name = f"img://往期精彩插图{pic_idx}"
-        bg_src = resolver.resolve_image_src(img_name)
-
-        card_sec = soup.new_tag('section')
-        card_sec['style'] = (
-            "position: relative; "
-            "width: 100%; "
-            "border-radius: 12px; "
-            "overflow: hidden; "
-            "box-sizing: border-box; "
-            "display: block; "
-            "margin-bottom: 6px; "
-            "box-shadow: 0 4px 12px rgba(0,0,0,0.15);"
-        )
-
-        # 1. Background Image tag (WeChat CDN compatible, 100% width, fixed 110px height)
-        img_tag = soup.new_tag('img')
-        img_tag['src'] = bg_src
-        img_tag['style'] = (
-            "width: 100%; "
-            "height: 110px; "
-            "object-fit: cover; "
-            "display: block; "
-            "vertical-align: middle; "
-            "border-radius: 12px;"
-        )
-        card_sec.append(img_tag)
-
-        # 2. Editable Text Overlay Layer pulled UP over the image using negative margin & gradient background
-        overlay_sec = soup.new_tag('section')
-        overlay_sec['style'] = (
-            "margin-top: -110px; "
-            "height: 110px; "
-            "position: relative; "
-            "z-index: 10; "
-            "padding: 16px; "
-            "box-sizing: border-box; "
-            "display: flex; "
-            "flex-direction: column; "
-            "justify-content: flex-end; "
-            "background: linear-gradient(180deg, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.85) 100%); "
-            "border-radius: 0 0 12px 12px;"
-        )
-
-        title_sec = soup.new_tag('section')
-        title_sec['style'] = (
-            "width: 100%; "
-            "color: #ffffff !important; "
-            "font-size: 15px; "
-            "font-weight: bold; "
-            "line-height: 1.4; "
-            "letter-spacing: 0.5px; "
-            "text-align: left; "
-            "text-shadow: 0 2px 4px rgba(0,0,0,0.9); "
-            "overflow: hidden; "
-            "text-overflow: ellipsis; "
-            "white-space: nowrap; "
-            "display: block;"
-        )
-        title_sec.string = item.get('title', '')
-        overlay_sec.append(title_sec)
-
-        card_sec.append(overlay_sec)
-        a_tag.append(card_sec)
-        rec_div.append(a_tag)
+        rec_div.append(row_sec)
 
     return rec_div
 
@@ -1370,6 +1211,15 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
 
     # Parse with BeautifulSoup for structural modifications
     soup = BeautifulSoup(html, 'html.parser')
+    # Workspace rule: H1/H2/H3 contain plain text headings.
+    for heading in soup.find_all(["h1", "h2", "h3"]):
+        for text_node in list(heading.find_all(string=True)):
+            text_node.replace_with("".join(
+                ch for ch in str(text_node)
+                if not is_emoji_char(ch) and ord(ch) not in (0xFE0F, 0xFE0E, 0x200D, 0x20E3)
+                and not 0x1F1E6 <= ord(ch) <= 0x1F1FF
+            ))
+
 
     # Remove nested strong tags (flattening) to prevent WeChat editor copy-paste line breaks
     for strong in list(soup.find_all('strong')):
