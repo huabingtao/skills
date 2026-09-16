@@ -1,0 +1,149 @@
+/* 活动主题 - event.css */
+/* Bright, warm, festive style for game events and promotions optimized for WeChat articles */
+
+h1 {
+  font-size: 1.6em !important;
+  font-weight: bold !important;
+  border-bottom: 2px solid #ff4d4f !important;
+  padding-bottom: 8px !important;
+  margin-top: 30px !important;
+  margin-bottom: 20px !important;
+  color: #d32f2f !important;
+}
+
+h2 {
+  font-size: 1.35em !important;
+  font-weight: bold !important;
+  border-left: 4px solid #ff9800 !important;
+  padding-left: 12px !important;
+  margin-top: 30px !important;
+  margin-bottom: 15px !important;
+  color: #d32f2f !important;
+  background-color: #fff8e1 !important;
+  padding-top: 6px !important;
+  padding-bottom: 6px !important;
+  border-radius: 4px !important;
+}
+
+h3 {
+  font-size: 1.15em !important;
+  font-weight: bold !important;
+  border-left: 3px solid #ff5722 !important;
+  padding-left: 8px !important;
+  margin-top: 22px !important;
+  margin-bottom: 10px !important;
+  color: #ff5722 !important;
+}
+
+p {
+  margin: 16px 0;
+  line-height: 1.8;
+  color: #5d4037;
+  font-size: 15px;
+  text-align: justify;
+  word-break: break-word;
+}
+
+code {
+  font-family: Menlo, Monaco, Consolas, Courier, monospace;
+  background-color: #fff3e0;
+  color: #d84315;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.9em;
+  margin: 0 2px;
+}
+
+pre {
+  background-color: #3e2723;
+  color: #efebe9;
+  padding: 16px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 20px 0;
+  line-height: 1.5;
+  font-size: 13px;
+  box-shadow: 0 4px 6px rgba(216,67,21,0.15);
+}
+
+pre code {
+  background: none;
+  color: inherit;
+  padding: 0;
+  border-radius: 0;
+  font-family: Menlo, Monaco, Consolas, Courier, monospace;
+  margin: 0;
+}
+
+ul {
+  padding-left: 20px !important;
+  margin: 15px 0 !important;
+  list-style-type: disc !important;
+}
+
+ol {
+  padding-left: 20px !important;
+  margin: 15px 0 !important;
+  list-style-type: decimal !important;
+}
+
+li {
+  margin-bottom: 8px !important;
+  line-height: 1.75 !important;
+  color: #5d4037 !important;
+  text-align: left !important;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 20px 0;
+  font-size: 14px;
+  border: 1px solid #ffe0b2;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+th {
+  background-color: #ffe0b2;
+  border: 1px solid #ffd54f;
+  padding: 10px 14px;
+  font-weight: bold;
+  text-align: center;
+  color: #d84315;
+}
+
+td {
+  border: 1px solid #ffe0b2;
+  padding: 10px 14px;
+  text-align: left;
+  color: #5d4037;
+}
+
+blockquote {
+  border-left: 4px solid #ffb74d;
+  color: #5d4037;
+  padding: 12px 16px;
+  margin: 20px 0;
+  background-color: #fff3e0;
+  border-radius: 0 6px 6px 0;
+}
+
+hr {
+  height: 1px;
+  padding: 0;
+  margin: 30px 0;
+  background-color: #ffd54f;
+  border: 0;
+}
+
+strong {
+  font-weight: bold !important;
+  display: inline !important;
+  color: #e65100 !important;
+}
+
+li strong {
+  display: inline !important;
+  white-space: nowrap !important;
+}

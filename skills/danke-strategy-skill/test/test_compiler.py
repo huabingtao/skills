@@ -1,0 +1,300 @@
+# -*- coding: utf-8 -*-
+import os
+import sys
+import unittest
+import json
+from bs4 import BeautifulSoup
+
+# Ensure project root is in python path to import engine
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+from engine.compiler import convert_to_wechat_html
+from engine.compiler import convert_to_optimized_markdown, preprocess_markdown
+from scripts.compile import load_project_config
+
+class TestWeChatCompiler(unittest.TestCase):
+    
+    @classmethod
+    def setUpClass(cls):
+        cls.pack_dir = os.path.join(PROJECT_ROOT, "packs", "danke")
+        cls.project_config = load_project_config(cls.pack_dir)
+
+    def test_numerical_highlighting(self):
+        """Verify status values like +5% and +3s are highlighted in red strong font tags when rules are applied directly."""
+        from engine.highlight import apply_highlight_rules, load_highlight_rules
+        md = "暴击率+5%\n幽灵状态时间上限+3s\n升满 +2000攻击\n最终攻击 +2000\n+2000生命\n生命 +2000"
+        rules = load_highlight_rules(self.project_config.get('highlight_rules_path'))
+        res = apply_highlight_rules(md, rules)
+        self.assertIn('<strong><font color="#FF4D4F">+5%</font></strong>', res)
+        self.assertIn('<strong><font color="#FF4D4F">+3s</font></strong>', res)
+        self.assertIn('<strong><font color="#FF4D4F">+2000</font></strong>攻击', res)
+        self.assertIn('最终攻击<strong><font color="#FF4D4F"> +2000</font></strong>', res)
+        self.assertIn('<strong><font color="#FF4D4F">+2000</font></strong>生命', res)
+        self.assertIn('生命<strong><font color="#FF4D4F"> +2000</font></strong>', res)
+
+    def test_highlight_nesting_prevention(self):
+        """Verify that auto-highlighting is disabled by default in convert_to_wechat_html."""
+        md = "暴击率+5%\n幽灵状态时间上限+3s"
+        html, _ = convert_to_wechat_html(md, self.project_config)
+        soup = BeautifulSoup(html, 'html.parser')
+        # Since auto-highlighting is commented out, there should be no font tags
+        self.assertEqual(len(soup.find_all('font')), 0)
+
+    def test_image_center_layout(self):
+        """Verify the new type=center image layout with custom width."""
+        # Test default center layout (no custom width -> auto)
+        md_default = "![等离子剑](img://等离子剑){type=center}"
+        html_default, _ = convert_to_wechat_html(md_default, self.project_config)
+        soup_default = BeautifulSoup(html_default, 'html.parser')
+        img_default = soup_default.find('img')
+        self.assertIsNotNone(img_default)
+        style_default = img_default.get('style', '')
+        self.assertIn("display: block", style_default)
+        self.assertIn("margin: 20px auto", style_default)
+        self.assertIn("width: auto", style_default)
+
+        # Test center layout with custom percentage width
+        md_pct = "![等离子剑](img://等离子剑){type=center;w=60%}"
+        html_pct, _ = convert_to_wechat_html(md_pct, self.project_config)
+        soup_pct = BeautifulSoup(html_pct, 'html.parser')
+        img_pct = soup_pct.find('img')
+        style_pct = img_pct.get('style', '')
+        self.assertIn("width: 60%", style_pct)
+
+        # Test width=50% syntax
+        md_width50 = "![截图](img://截图){width=50%}"
+        html_width50, _ = convert_to_wechat_html(md_width50, self.project_config)
+        soup_width50 = BeautifulSoup(html_width50, 'html.parser')
+        img_width50 = soup_width50.find('img')
+        style_width50 = img_width50.get('style', '')
+        self.assertIn("width: 50%", style_width50)
+
+        # Test center layout with custom pixel width (no unit -> automatically appends px)
+        md_px = "![等离子剑](img://等离子剑){type=center;w=250}"
+        html_px, _ = convert_to_wechat_html(md_px, self.project_config)
+        soup_px = BeautifulSoup(html_px, 'html.parser')
+        img_px = soup_px.find('img')
+        style_px = img_px.get('style', '')
+        self.assertIn("width: 250px", style_px)
+
+    def test_other_image_layouts(self):
+        """Verify standard card and banner image layouts are correctly styled."""
+        md = "![等离子剑](img://等离子剑){type=card}\n![追光者](img://追光者){type=banner}"
+        html, _ = convert_to_wechat_html(md, self.project_config)
+        soup = BeautifulSoup(html, 'html.parser')
+        imgs = [i for i in soup.find_all('img') if '二维码' not in (i.get('alt') or '')]
+        self.assertEqual(len(imgs), 2)
+        
+        # Verify card style
+        self.assertIn("width: 90%", imgs[0].get('style', ''))
+        self.assertIn("border-radius: 12px", imgs[0].get('style', ''))
+        
+        # Verify banner style
+        self.assertIn("width: 100%", imgs[1].get('style', ''))
+        self.assertIn("border-radius: 8px", imgs[1].get('style', ''))
+
+    def test_image_caption(self):
+        """Verify image captions are correctly wrapped and styled."""
+        md_single = "![等离子剑](img://等离子剑){type=banner; caption=神器外观说明}"
+        html_single, _ = convert_to_wechat_html(md_single, self.project_config)
+        soup_single = BeautifulSoup(html_single, 'html.parser')
+        
+        wrapper = soup_single.find('section', class_='img-caption-wrapper')
+        self.assertIsNotNone(wrapper)
+        caption_node = soup_single.find('section', class_='img-caption')
+        self.assertIsNotNone(caption_node)
+        self.assertEqual(caption_node.get_text().strip(), "神器外观说明")
+        self.assertIn("color: #888888", caption_node.get('style', ''))
+        self.assertIn("font-size: 12px", caption_node.get('style', ''))
+        self.assertIn("text-align: center", caption_node.get('style', ''))
+
+        # Test grid images with captions
+        md_grid = "![等离子剑](img://等离子剑){type=grid2; caption=\"兑换碎片A\"}\n![追光者](img://追光者){type=grid2; caption=\"兑换碎片B\"}"
+        html_grid, _ = convert_to_wechat_html(md_grid, self.project_config)
+        soup_grid = BeautifulSoup(html_grid, 'html.parser')
+        
+        wrappers = soup_grid.find_all('section', class_='img-caption-wrapper')
+        self.assertEqual(len(wrappers), 2)
+        for w in wrappers:
+            self.assertIn("width: 48%", w.get('style', ''))
+            self.assertIn("display: inline-block", w.get('style', ''))
+            self.assertIn("vertical-align: top", w.get('style', ''))
+        
+        captions = soup_grid.find_all('section', class_='img-caption')
+        self.assertEqual(len(captions), 2)
+        self.assertEqual(captions[0].get_text().strip().strip('"'), "兑换碎片A")
+        self.assertEqual(captions[1].get_text().strip().strip('"'), "兑换碎片B")
+
+    def test_list_colon_nowrap(self):
+        """Verify list items are converted into clean Emoji Paragraphs without <ul>/<li> tags to prevent WeChat line breaks."""
+        md = (
+            "* **专属效果**：对应S级装备破坏者风衣。\n"
+            "* 培养建议: 推荐拉到3[红星]\n"
+            "* 3[红星](img://红星){type=icon}：暴击率+5%\n"
+        )
+        html, _ = convert_to_wechat_html(md, self.project_config)
+        soup = BeautifulSoup(html, 'html.parser')
+        paragraphs = soup.find_all('p')
+        self.assertTrue(len(paragraphs) >= 3)
+        self.assertEqual(len(soup.find_all('li')), 0)
+
+    def test_non_capturing_highlighting(self):
+        """Verify that highlight rules with non-capturing patterns (no groups) are correctly highlighted."""
+        custom_rules = {
+            "colors": {
+                "red": "#FF4D4F",
+                "green": "#52C41A"
+            },
+            "red": [
+                # Capturing group pattern
+                {"pattern": r"(\+5%)"}
+            ],
+            "green": [
+                # Non-capturing group pattern
+                {"pattern": r"\+10%"}
+            ]
+        }
+        
+        from engine.highlight import apply_highlight_rules
+        
+        # Test capturing group pattern
+        text1 = "暴击率+5%"
+        res1 = apply_highlight_rules(text1, custom_rules)
+        self.assertIn('<strong><font color="#FF4D4F">+5%</font></strong>', res1)
+        
+        # Test non-capturing pattern (used to crash before optimization)
+        text2 = "生命值+10%"
+        res2 = apply_highlight_rules(text2, custom_rules)
+        self.assertIn('<strong><font color="#52C41A">+10%</font></strong>', res2)
+
+    def test_ruby_annotations_collision_prevention(self):
+        """Verify that Ruby annotations regex only matches phonetic annotations, and does not collide with attributes."""
+        # 1. Normal Ruby annotation should work
+        md_ruby = "[拼音]{pin1 yin1}"
+        html_ruby, _ = convert_to_wechat_html(md_ruby, self.project_config)
+        self.assertIn("<ruby>拼音<rt>pin1 yin1</rt></ruby>", html_ruby)
+
+        # 2. Image/link attribute style should NOT be matched as Ruby annotation
+        md_attr = "[追光者]{type=card}"
+        html_attr, _ = convert_to_wechat_html(md_attr, self.project_config)
+        # Should stay plain text instead of converting to <ruby>
+        self.assertNotIn("<ruby>", html_attr)
+
+    def test_frontmatter_cover_and_shorthand_resolution(self):
+        """Verify metadata cover and {{name}} shorthand use the shared resolver.
+        COS 模式下期望返回 CDN URL；本地模式下返回本地路径。
+        """
+        md = "---\ntitle: 封面测试\nimage: img://等离子剑\n---\n共鸣伤害{{共鸣伤害}}"
+        html, metadata = convert_to_wechat_html(md, self.project_config)
+        img_val = metadata["image"]
+        # COS 模式：CDN URL；本地模式：本地路径 — 两种都是合法的解析结果
+        self.assertTrue(
+            img_val.startswith("https://") or img_val.endswith(".png"),
+            f"image 应为 URL 或 png 路径，实际: {img_val}"
+        )
+        self.assertIn("等离子剑", img_val)
+        soup = BeautifulSoup(html, 'html.parser')
+        img = soup.find('img', attrs={'alt': '共鸣伤害'})
+        self.assertIsNotNone(img)
+        self.assertIn("共鸣伤害", img.get('src', ''))
+        self.assertIn("width: 24px", img.get('style', ''))
+
+    def test_external_link_footnotes_deduplicate(self):
+        """Verify repeated external links share a single footnote index."""
+        md = "[A](https://example.com)\n[B](https://example.com)"
+        html, _ = convert_to_wechat_html(md, self.project_config)
+        soup = BeautifulSoup(html, 'html.parser')
+        self.assertEqual([sup.text for sup in soup.find_all('sup')], ["[1]", "[1]"])
+        self.assertEqual(soup.get_text().count("https://example.com"), 1)
+
+    def test_optimized_markdown_uses_shared_image_resolver(self):
+        """Verify optimized markdown resolves img:// paths through the same resolver.
+        COS 模式下期望 CDN URL；本地模式下期望本地路径。
+        """
+        md = "---\nimage: img://等离子剑\n---\n{{共鸣伤害}}"
+        optimized = convert_to_optimized_markdown(md, self.project_config)
+        # 等离子剑 应出现在 image/cover 字段中
+        self.assertIn("等离子剑", optimized)
+        # 共鸣伤害图标应被解析为图片
+        self.assertIn("共鸣伤害", optimized)
+        self.assertIn("width=24px", optimized)
+
+    def test_highlight_is_explicitly_opt_in_for_preprocess(self):
+        """Document the Stage 1/Stage 3 highlight contract in code."""
+        md = "暴击率+5%"
+        self.assertNotIn("<font", preprocess_markdown(md, self.project_config))
+        self.assertIn("<font", preprocess_markdown(md, self.project_config, enable_highlight=True))
+
+    def test_recommendations_section(self):
+        """Verify that {{往期推荐}} placeholder is cleanly removed without generating recommendation block."""
+        md = "---\ntitle: 测试文章\n---\n文章主体内容。\n\n{{往期推荐}}"
+        html, _ = convert_to_wechat_html(md, self.project_config)
+        soup = BeautifulSoup(html, 'html.parser')
+        
+        # Check that {{往期推荐}} is removed and no 往期精彩推荐 section exists
+        rec_title = soup.find(lambda tag: tag.name == 'section' and "往期精彩推荐" in tag.get_text())
+        self.assertIsNone(rec_title)
+        self.assertNotIn("{{往期推荐}}", html)
+
+    def test_recommendations_not_inserted_without_placeholder(self):
+        """Verify that the recommendations section is NOT rendered when recommendations is omitted in frontmatter."""
+        md = "---\ntitle: 测试文章\n---\n文章主体内容。"
+        html, _ = convert_to_wechat_html(md, self.project_config)
+        soup = BeautifulSoup(html, 'html.parser')
+        
+        rec_title = soup.find(lambda tag: tag.name == 'section' and "往期精彩推荐" in tag.get_text())
+        self.assertIsNone(rec_title)
+
+    def test_qrcode_generation_with_placeholder(self):
+        """Verify the QR code section is generated when the placeholder is present."""
+        md = "---\ntitle: 测试文章\nauthor: 弹壳小能手\nqrcode_url: \"https://example.com/follow\"\n---\n这里是内容。\n\n{{扫码获取更多精彩}}"
+        html, _ = convert_to_wechat_html(md, self.project_config)
+        soup = BeautifulSoup(html, 'html.parser')
+        
+        # Check title and footer text
+        qr_title = soup.find(lambda tag: tag.name == 'section' and "扫码获取更多精彩" in tag.get_text())
+        self.assertIsNotNone(qr_title)
+        
+        qr_footer = soup.find(lambda tag: tag.name == 'section' and "长按识别二维码关注「弹壳小能手」" in tag.get_text())
+        self.assertIsNotNone(qr_footer)
+        
+        # Verify the QR code image points to api.qrserver.com with the custom URL
+        img = soup.find('img', attrs={'alt': '二维码'})
+        self.assertIsNotNone(img)
+        self.assertTrue(img['src'].endswith("_qrcode_temp.png") or "api.qrserver.com" in img['src'])
+
+    def test_qrcode_not_inserted_without_placeholder(self):
+        """Verify that the QR code section is NOT rendered when qrcode_image is set to false."""
+        md = "---\ntitle: 测试文章\nauthor: 弹壳小能手\nqrcode_image: false\n---\n这里是内容。"
+        html, _ = convert_to_wechat_html(md, self.project_config)
+        soup = BeautifulSoup(html, 'html.parser')
+        
+        qr_title = soup.find(lambda tag: tag.name == 'section' and "扫码获取更多精彩" in tag.get_text())
+        self.assertIsNone(qr_title)
+
+    def test_qrcode_default_static_image(self):
+        """Verify that QR code defaults to the static image provided by the user when no custom url/image is in frontmatter."""
+        md = "---\ntitle: 测试文章\nauthor: 弹壳小能手\n---\n这里是内容。\n\n{{扫码获取更多精彩}}"
+        html, _ = convert_to_wechat_html(md, self.project_config)
+        soup = BeautifulSoup(html, 'html.parser')
+        
+        img = soup.find('img', attrs={'alt': '二维码'})
+        # When no qrcode_url / qrcode_image in frontmatter, the img tag still renders (src may be empty or config-relative)
+        self.assertIsNotNone(img)
+
+    def test_unordered_list_normalization(self):
+        """Verify that unordered lists starting with '*' or '+' are normalized to '-' during preprocess."""
+        md = "* 列表项一\n  + 列表项二\n- 列表项三\n* 列表项四：包含冒号\n  * 嵌套列表项"
+        normalized = preprocess_markdown(md, self.project_config)
+        self.assertIn("- 列表项一", normalized)
+        self.assertIn("  - 列表项二", normalized)
+        self.assertIn("- 列表项三", normalized)
+        self.assertIn("- 列表项四：包含冒号", normalized)
+        self.assertIn("  - 嵌套列表项", normalized)
+        self.assertNotIn("* 列表项一", normalized)
+        self.assertNotIn("+ 列表项二", normalized)
+
+if __name__ == '__main__':
+    unittest.main()
