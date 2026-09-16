@@ -260,7 +260,7 @@ class ImageResolver:
     Resolves img://, mapped, relative, and fallback image references.
     """
 
-    def __init__(self, project_config, input_dir=None, verbose=False):
+    def __init__(self, project_config, input_dir=None, output_dir=None, verbose=False):
         self.project_config = project_config or {}
         if input_dir:
             if os.path.isfile(input_dir):
@@ -269,6 +269,14 @@ class ImageResolver:
                 self.input_dir = os.path.abspath(input_dir)
         else:
             self.input_dir = None
+
+        if output_dir:
+            if os.path.isfile(output_dir):
+                self.output_dir = os.path.dirname(os.path.abspath(output_dir))
+            else:
+                self.output_dir = os.path.abspath(output_dir)
+        else:
+            self.output_dir = None
 
         self.verbose = verbose
         self.assets_dir = self.project_config.get("assets_dir")
@@ -333,9 +341,10 @@ class ImageResolver:
         if not abs_path:
             abs_path = os.path.abspath(path)
 
-        if self.input_dir and os.path.exists(abs_path):
+        base_dir = self.output_dir or self.input_dir
+        if base_dir and os.path.exists(abs_path):
             try:
-                rel = os.path.relpath(abs_path, os.path.abspath(self.input_dir)).replace('\\', '/')
+                rel = os.path.relpath(abs_path, os.path.abspath(base_dir)).replace('\\', '/')
                 return rel
             except ValueError:
                 pass
@@ -366,9 +375,10 @@ class ImageResolver:
 
     def relative_to_input_or_project(self, path):
         abs_p = self.get_abs_path(path)
-        if self.input_dir and abs_p and os.path.isabs(abs_p) and os.path.exists(abs_p):
+        base_dir = self.output_dir or self.input_dir
+        if base_dir and abs_p and os.path.isabs(abs_p) and os.path.exists(abs_p):
             try:
-                rel = os.path.relpath(abs_p, self.input_dir).replace('\\', '/')
+                rel = os.path.relpath(abs_p, base_dir).replace('\\', '/')
                 return rel
             except ValueError:
                 pass
@@ -690,10 +700,6 @@ def convert_lists_to_emoji_paragraphs(soup):
     for list_tag in list(soup.find_all(['ul', 'ol'])):
         paragraphs = []
         for li in list_tag.find_all('li', recursive=False):
-            # Natural list entries must not regain bold during color conversion.
-            for bold in list(li.find_all(["strong", "b"])):
-                bold.unwrap()
-
             text = li.get_text(strip=True)
             if not text and not li.find_all('img'):
                 continue
@@ -1180,7 +1186,7 @@ def replace_qrcode_placeholder(soup, project_config, input_dir, metadata):
             soup.append(qr_div)
 
 
-def convert_to_wechat_html(md_content, project_config, input_dir=None):
+def convert_to_wechat_html(md_content, project_config, input_dir=None, output_dir=None):
     """
     Converts Markdown content to HTML with inline CSS styles optimized for WeChat.
     
@@ -1188,13 +1194,25 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None):
         md_content: Raw Markdown string.
         project_config: Dict of absolute paths for configuration.
         input_dir: Directory where the source markdown file is located.
+        output_dir: Directory where the compiled HTML will be saved.
         
     Returns:
         A tuple of (wrapped_html, metadata).
     """
     theme_path = project_config.get("theme_path")
-    resolver = ImageResolver(project_config, input_dir=input_dir, verbose=True)
+    resolver = ImageResolver(project_config, input_dir=input_dir, output_dir=output_dir, verbose=True)
     md_content, metadata = extract_frontmatter(md_content)
+
+    # Check if article-top banner is missing in strategy/activity articles
+    has_article_top_asset = "article-top" in resolver.image_mapping or resolver.check_file_exists("assets/img/article-top.jpg")
+    banner_disabled = metadata.get("banner") is False or metadata.get("no_banner") is True
+    if has_article_top_asset and not banner_disabled:
+        if "article-top" not in md_content and "{type=banner}" not in md_content:
+            article_type = str(metadata.get("type", "")).lower()
+            title = str(metadata.get("title", ""))
+            if article_type not in ("calendar", "notice", "news") and "日历" not in title:
+                print("⚠ [Validation Warning] 检测到攻略文章未包含顶部横幅 `![article-top](img://article-top){type=banner}`！")
+
     md_content = preprocess_markdown(md_content, project_config)
     metadata = resolver.resolve_metadata_cover(metadata)
 

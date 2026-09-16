@@ -152,7 +152,8 @@ def main():
             content = f.read()
 
         input_dir = os.path.dirname(os.path.abspath(input_path))
-        wechat_html, metadata = convert_to_wechat_html(content, project_config, input_dir=input_dir)
+        output_dir = os.path.dirname(os.path.abspath(output_path))
+        wechat_html, metadata = convert_to_wechat_html(content, project_config, input_dir=input_dir, output_dir=output_dir)
 
         # Save HTML
         with open(output_path, "w", encoding="utf-8") as f:

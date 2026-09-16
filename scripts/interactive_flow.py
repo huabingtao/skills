@@ -147,7 +147,8 @@ def run_stage_3(input_path, output_path, project_config, source_dir=None):
         input_dir = os.path.dirname(input_dir)
     local_config = project_config.copy()
     local_config["highlight_rules_path"] = None
-    wechat_html, metadata = convert_to_wechat_html(content, local_config, input_dir=input_dir)
+    output_dir = os.path.dirname(os.path.abspath(output_path))
+    wechat_html, metadata = convert_to_wechat_html(content, local_config, input_dir=input_dir, output_dir=output_dir)
     # Metadata travels with dist HTML; local covers must remain resolvable there.
     for key in ("cover", "image", "cover_vertical"):
         value = metadata.get(key)
