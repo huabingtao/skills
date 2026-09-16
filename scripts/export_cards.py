@@ -33,13 +33,14 @@ def direct_slice_html(html_file_path, output_dir=None, target_width=1080, target
         
         page.goto(file_url, wait_until="networkidle")
 
-        # 清洗/移除二维码与往期精彩节点
+        # 清洗/移除二维码与页脚往期精彩推荐节点
         page.evaluate("""() => {
             document.body.style.margin = '0';
             document.body.style.padding = '30px 40px';
             document.body.style.background = '#ffffff';
             document.body.style.boxSizing = 'border-box';
 
+            // 移除二维码容器
             document.querySelectorAll('img').forEach(img => {
                 const alt = img.getAttribute('alt') || '';
                 const src = img.getAttribute('src') || '';
@@ -49,23 +50,19 @@ def direct_slice_html(html_file_path, output_dir=None, target_width=1080, target
                 }
             });
 
-            const targetTexts = ['往期精彩', '往期推荐', '相关推荐', '扫码获取更多'];
-            document.querySelectorAll('h2, h3, h4, section, p').forEach(el => {
+            // 仅清理底部的推荐卡片与二维码，严禁删除主页面容器
+            document.querySelectorAll('span, section, div, p').forEach(el => {
                 const text = (el.innerText || '').trim();
-                for (let kw of targetTexts) {
-                    if (text === kw || text.startsWith(kw)) {
-                        let nextNode = el.nextElementSibling;
-                        el.remove();
-                        while (nextNode) {
-                            let temp = nextNode.nextElementSibling;
-                            nextNode.remove();
-                            nextNode = temp;
-                        }
-                        break;
+                if (text === '下方查看' || text === '往期精彩推荐' || text === '扫码获取更多精彩') {
+                    let box = el.closest('section[style*="margin: 30px auto"]') || el.closest('section[style*="border"]') || el.closest('a');
+                    if (box && box.parentElement && box.parentElement !== document.body && box.parentElement.children.length > 1) {
+                        box.remove();
                     }
                 }
             });
+
         }""")
+
 
         full_height = page.evaluate("document.body.scrollHeight")
         print(f"📏 清洗后网页总高度: {full_height}px, 目标卡片高度: {target_height}px")
