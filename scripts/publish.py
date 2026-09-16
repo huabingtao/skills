@@ -144,24 +144,47 @@ def process_content_images(client, html_content, base_dir, cache, cache_file):
             else:
                 clean_src = urllib.parse.unquote(src)
                 potential_paths = [
+                    os.path.join(base_dir, clean_src),
                     os.path.join(base_dir, clean_src.lstrip('/')),
+                    os.path.join(base_dir, '..', clean_src),
+                    os.path.join(base_dir, '..', '..', clean_src),
                     clean_src
                 ]
+                if 'danke-strategy-skill' in clean_src:
+                    idx = clean_src.find('danke-strategy-skill')
+                    potential_paths.append(os.path.join('/Users/hbt/my-project/skills', clean_src[idx:]))
+                    potential_paths.append(os.path.join('/home/guagua/workspace/.agents/skills', clean_src[idx:]))
+
                 upload_path = None
                 for path in potential_paths:
-                    if os.path.exists(path) and os.path.isfile(path):
-                        upload_path = path
+                    norm = os.path.abspath(path)
+                    if os.path.exists(norm) and os.path.isfile(norm):
+                        upload_path = norm
                         break
 
                 if not upload_path:
-                    # Fallback: walk base_dir for a file with matching suffix
+                    # Fallback: search by suffix or filename in base_dir, parent dir, and pack assets
                     norm_src = clean_src.replace('\\', '/')
-                    for r, d, files in os.walk(base_dir):
-                        d[:] = [dn for dn in d if dn not in ('venv', '.venv', '.git', '__pycache__', 'node_modules')]
-                        for f in files:
-                            full_f = os.path.join(r, f).replace('\\', '/')
-                            if full_f.endswith(norm_src):
-                                upload_path = os.path.join(r, f)
+                    img_name = os.path.basename(clean_src)
+                    search_roots = [
+                        base_dir,
+                        os.path.abspath(os.path.join(base_dir, '..')),
+                        '/Users/hbt/my-project/skills/danke-strategy-skill/packs/danke/assets'
+                    ]
+                    for s_root in search_roots:
+                        if not os.path.isdir(s_root):
+                            continue
+                        for r, d, files in os.walk(s_root):
+                            d[:] = [dn for dn in d if dn not in ('venv', '.venv', '.git', '__pycache__', 'node_modules')]
+                            if img_name in files:
+                                upload_path = os.path.join(r, img_name)
+                                break
+                            for f in files:
+                                full_f = os.path.join(r, f).replace('\\', '/')
+                                if full_f.endswith(norm_src):
+                                    upload_path = os.path.join(r, f)
+                                    break
+                            if upload_path:
                                 break
                         if upload_path:
                             break
@@ -271,19 +294,28 @@ def resolve_cover_path(cover_path, content_path):
 
     base = os.path.dirname(os.path.abspath(content_path))
     potential_paths = [
+        os.path.join(base, cover_path),
         os.path.join(base, cover_path.lstrip('/')),
+        os.path.join(base, '..', cover_path),
+        os.path.join(base, '..', cover_path.lstrip('/')),
     ]
     for path in potential_paths:
-        if os.path.exists(path):
-            return path
+        if os.path.exists(path) and os.path.isfile(path):
+            return os.path.abspath(path)
 
     norm_cover = cover_path.replace('\\', '/')
-    for root, dirs, files in os.walk(base):
-        dirs[:] = [dn for dn in dirs if dn not in ('venv', '.venv', '.git', '__pycache__', 'node_modules')]
-        for filename in files:
-            full_file = os.path.join(root, filename).replace('\\', '/')
-            if full_file.endswith(norm_cover):
-                return os.path.join(root, filename)
+    search_dirs = [base, os.path.abspath(os.path.join(base, '..'))]
+    for s_dir in search_dirs:
+        if not os.path.isdir(s_dir):
+            continue
+        for root, dirs, files in os.walk(s_dir):
+            dirs[:] = [dn for dn in dirs if dn not in ('venv', '.venv', '.git', '__pycache__', 'node_modules')]
+            if os.path.basename(cover_path) in files:
+                return os.path.join(root, os.path.basename(cover_path))
+            for filename in files:
+                full_file = os.path.join(root, filename).replace('\\', '/')
+                if full_file.endswith(norm_cover):
+                    return os.path.join(root, filename)
     return cover_path
 
 
