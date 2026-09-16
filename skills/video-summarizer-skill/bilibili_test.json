@@ -1,0 +1,67 @@
+{
+  "source": "bilibili",
+  "input": "https://www.bilibili.com/video/BV17K4y1N7c3",
+  "title": "Bilibili 视频 (BV17K4y1N7c3)",
+  "segments": [
+    {
+      "start": 0.0,
+      "end": 2.0,
+      "text": "Lalo, you already know that I'm a friend"
+    },
+    {
+      "start": 2.0,
+      "end": 4.4,
+      "text": "I don't think I just got my check"
+    },
+    {
+      "start": 4.4,
+      "end": 7.12,
+      "text": "Bucket feels like it's a buzz"
+    },
+    {
+      "start": 7.12,
+      "end": 12.16,
+      "text": "Battle scoop up on my friends in my lollolololo"
+    },
+    {
+      "start": 12.16,
+      "end": 15.120000000000001,
+      "text": "Once I've done for in the fight"
+    },
+    {
+      "start": 15.120000000000001,
+      "end": 17.84,
+      "text": "Smell us point on someone's love"
+    },
+    {
+      "start": 17.84,
+      "end": 20.32,
+      "text": "Drift the window drop in stacks"
+    },
+    {
+      "start": 20.32,
+      "end": 22.88,
+      "text": "To we go bro, go bro"
+    },
+    {
+      "start": 22.88,
+      "end": 24.72,
+      "text": "Get your money up"
+    },
+    {
+      "start": 24.72,
+      "end": 27.12,
+      "text": "In my sitting with a run it up"
+    },
+    {
+      "start": 27.6,
+      "end": 30.64,
+      "text": "Fuck like you need a slow down stand your land"
+    },
+    {
+      "start": 30.64,
+      "end": 33.760000000000005,
+      "text": "I left you here man"
+    }
+  ]
+}
