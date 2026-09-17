@@ -21,8 +21,10 @@ def find_workspace_root() -> Path:
     """自动向上查找工作区根目录"""
     current = Path(__file__).resolve()
     for parent in current.parents:
-        if (parent / "project" / "danke-creator").is_dir():
+        if (parent / "content" / "danke-creator").is_dir() or (parent / "project" / "danke-creator").is_dir():
             return parent
+    if Path("/Users/hbt/my-project").is_dir():
+        return Path("/Users/hbt/my-project")
     return Path("/home/guagua/workspace")
 
 
@@ -70,28 +72,16 @@ def validate_digest(data: dict, target_date: str) -> dict:
 
 RECOMMENDED_ARTICLES_POOL = [
     {
-        "title": "【新手进阶】高频问答FAQ第一弹：特工选择、狼马对比与配件过载全指南",
-        "url": "",
+        "title": "【攻略】高频问答FAQ第一弹：特工选择、狼马对比与配件过载全指南",
+        "url": "https://mp.weixin.qq.com/s/QMfvpK7okI0yFyg2kRYkXQ",
     },
     {
-        "title": "【资源精算】公会商店买空要78万？！月度全兑换精算与收益实测",
-        "url": "",
+        "title": "【工具】手把手教你使用弹壳特攻队伤害计算器",
+        "url": "https://mp.weixin.qq.com/s/vN79nJW3Cyn9sy0UDGvKaw",
     },
     {
-        "title": "【道具评测】日常挑战新增芯片与载具核心兑换深度解析",
-        "url": "",
-    },
-    {
-        "title": "【高难通关】新版区域行动全关卡通关攻略与词条克制技巧",
-        "url": "",
-    },
-    {
-        "title": "【特工评测】SP特工伏尔甘全方位实战测评与养成建议",
-        "url": "",
-    },
-    {
-        "title": "【爬塔冲榜】试炼之路高层爬塔通关思路与技能流派盘点",
-        "url": "",
+        "title": "【攻略】s宠物从入门到入土！",
+        "url": "https://mp.weixin.qq.com/s/pJitLL_Vu7wI9ctzSM-EMg",
     },
 ]
 
@@ -193,31 +183,54 @@ def build_reminder_article(data: dict) -> str:
 def auto_tag_file(file_path: Path):
     """自动调用 auto_tag.py 进行专有名词宏标签标注"""
     ws = find_workspace_root()
-    auto_tag_script = ws / "skill" / "danke-strategy-skill" / "scripts" / "auto_tag.py"
-    if auto_tag_script.exists():
+    candidates = [
+        ws / "skills" / "danke-strategy-skill" / "scripts" / "auto_tag.py",
+        ws / "skill" / "danke-strategy-skill" / "scripts" / "auto_tag.py",
+        Path.home() / "skills" / "skills" / "danke-strategy-skill" / "scripts" / "auto_tag.py",
+    ]
+    auto_tag_script = next((c for c in candidates if c.exists()), None)
+    if auto_tag_script:
         try:
             subprocess.run([sys.executable, str(auto_tag_script), str(file_path)], check=True)
+            print("✔ 专有名词宏自动标注完成")
         except Exception as e:
             print(f"⚠️ 自动宏标注跳过: {e}")
 
 
 def generate_covers(out_dir: Path, target_date_obj: datetime.date = None):
-    """使用全特工专属底图与带当天日期的文案生成封面"""
+    """使用全特工专属底图与带当天日期的文案生成封面（横屏与竖屏双模）"""
     out_dir.mkdir(parents=True, exist_ok=True)
     ws = find_workspace_root()
-    make_cover_script = ws / ".agents" / "skills" / "wechat-cover-generator" / "scripts" / "make_cover.py"
-    bg_img = ws / ".agents" / "skills" / "danke-calendar-skill" / "assets" / "reminder_cover_bg.jpg"
+    make_cover_script = None
+    for cand in [
+        ws / "skills" / "wechat-cover-generator" / "scripts" / "make_cover.py",
+        ws / ".agents" / "skills" / "wechat-cover-generator" / "scripts" / "make_cover.py",
+        Path.home() / "skills" / "skills" / "wechat-cover-generator" / "scripts" / "make_cover.py",
+    ]:
+        if cand.exists():
+            make_cover_script = cand
+            break
+
+    bg_img = Path(__file__).resolve().parent.parent / "assets" / "reminder_cover_bg.jpg"
     if not bg_img.exists():
-        bg_img = Path(__file__).resolve().parent.parent / "assets" / "reminder_cover_bg.jpg"
+        for cand_bg in [
+            ws / "skills" / "danke-calendar-skill" / "assets" / "reminder_cover_bg.jpg",
+            ws / ".agents" / "skills" / "danke-calendar-skill" / "assets" / "reminder_cover_bg.jpg",
+            Path.home() / "skills" / "skills" / "danke-calendar-skill" / "assets" / "reminder_cover_bg.jpg",
+        ]:
+            if cand_bg.exists():
+                bg_img = cand_bg
+                break
 
     if target_date_obj is None:
         target_date_obj = datetime.date.today()
 
     cover_text = f"弹壳特攻队\n提醒日历{target_date_obj.year}.{target_date_obj.month}.{target_date_obj.day}"
 
-    if make_cover_script.exists() and bg_img.exists():
+    if make_cover_script and make_cover_script.exists() and bg_img.exists():
         try:
-            cmd = [
+            # 1. 横屏封面 900x384
+            cmd_h = [
                 sys.executable,
                 str(make_cover_script),
                 "-i", str(bg_img),
@@ -225,12 +238,22 @@ def generate_covers(out_dir: Path, target_date_obj: datetime.date = None):
                 "-o", str(out_dir / "cover.png"),
                 "--style", "horizontal",
             ]
-            subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            print(f"🖼️ 专属封面已自动生成: {out_dir / 'cover.png'} (文字: {cover_text})")
+            subprocess.run(cmd_h, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            # 2. 竖屏封面 640x853
+            cmd_v = [
+                sys.executable,
+                str(make_cover_script),
+                "-i", str(bg_img),
+                "-t", cover_text,
+                "-o", str(out_dir / "cover_vertical.png"),
+                "--style", "vertical",
+            ]
+            subprocess.run(cmd_v, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            print(f"🖼️ 专属双模封面已自动生成: {out_dir / 'cover.png'}, {out_dir / 'cover_vertical.png'} (文字: {cover_text})")
         except Exception as e:
             raise RuntimeError("封面生成失败") from e
     else:
-        raise FileNotFoundError("缺少封面脚本或背景素材")
+        raise FileNotFoundError(f"缺少封面脚本 ({make_cover_script}) 或背景素材 ({bg_img})")
 
 
 def main():
@@ -264,7 +287,8 @@ def main():
     if args.output_dir:
         out_dir = Path(args.output_dir)
     else:
-        out_dir = ws / "project" / "danke-creator" / "my-articles-md" / "提醒" / short_date
+        creator_root = ws / "content" / "danke-creator" if (ws / "content" / "danke-creator").is_dir() else ws / "project" / "danke-creator"
+        out_dir = creator_root / "my-articles-md" / "提醒" / short_date
 
     out_dir.mkdir(parents=True, exist_ok=True)
     out_file = out_dir / f"{short_date}.md"
