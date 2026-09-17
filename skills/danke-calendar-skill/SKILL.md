@@ -1,79 +1,115 @@
 ---
 name: danke-calendar-skill
-description: "专为《弹壳特攻队》打造的每日待办与活动倒计时日历自动化技能。一键计算全量11大玩法周期倒计时（按剩余天数自动标红高亮）、智能生成标准排版Markdown、配套横竖双版封面、自动化编译微信HTML排版、3:4高清图文切图与一键发布微信公众号草稿箱。触发词：弹壳日历, 今日日历, 生成日历, 倒计时日历, 弹壳特攻队日历, 每日待办, calendar, danke calendar"
+description: "专为《弹壳特攻队》每日活动待办与倒计时日历打造的专属创作技能。100%严格依据后台/danke-mcp-server查询出来的规则事实(statusText + digestNote)生成极简清单（单行展示），并在文末精选推荐3篇往期攻略以纯文字居中链接展示，封面统一使用全特工专属底图并渲染「弹壳特攻队 提醒日历YYYY.M.D」。输出路径规范为 project/danke-creator/my-articles-md/提醒/YY.M.D/YY.M.D.md。当用户说'生成弹壳日历'、'生成每日提醒'、'写日历文章'、'今天的日历'、'calendar'、'danke calendar'、'daily reminder'、'生成今日待办'时触发。"
 ---
 
-# danke-calendar-skill (弹壳日历自动化生成技能)
+# danke-calendar-skill
 
-`danke-calendar-skill` 专为《弹壳特攻队》自媒体内容矩阵设计，全自动接管每日日常提醒文章的生成、封面制作、排版美化、3:4 卡片切图与公众号发布。
-
----
-
-## 核心能力
-
-1. **精确周期数学建模**：
-   - 囊括游戏内全部 **11 大玩法**：日常挑战（3天）、神秘商人（3天）、试炼之路（5天）、周常（周日结）、联机挑战（周日结）、饼干和联机复活币兑换（周日结）、公会探索（周三结）、区域行动（14天）、回响之战（14天）、公会商店刷新（月末结）、逃离行动（30天赛季）。
-   - 自动按剩余时间从小到大（紧迫程度优先）排序。
-2. **重点倒计时高亮**：
-   - 剩余天数 $\le 3$ 天自动应用 `<font color="#dc2626">还剩 X 天</font>` 红色警戒高亮，大于 3 天显示标准文案。
-3. **全流程管道打通**：
-   - **文章生成**：按工作区标准模版生成 `my-articles-md/提醒/YY.M.D/YY.M.D.md`。
-   - **封面配套**：横屏封面 `cover.png` (900x384) 与竖屏封面 `cover_vertical.png` (640x853)。
-   - **微信编译**：无缝对接 `danke-strategy-skill` 生成行内样式美化 HTML 与 `.json` 旁注元数据。
-   - **多平台切图**：对接 `article-to-img-skill` 生成 3:4 (1080x1440) 高清图文直切卡片。
-   - **公众号发布**：对接 `wechat-publisher-skill` 直推微信公众号草稿箱。
+专为《弹壳特攻队》自媒体运营打造的**每日玩法待办与倒计时日历**内容创作 Skill。
+全自动对接数据中心（`danke-mcp-server` / `danke-core`），动态计算当天全部活动规则状态，按统一规范生成客观、真实、无 AI 编造内容的极简每日待办日历初稿。
 
 ---
 
-## 命令行调用方式
+## 🎯 触发词
+
+- "生成今天的弹壳日历"
+- "生成今天的每日提醒"
+- "写一篇每日日历公众号"
+- "生成今日待办事项"
+- "查询今天有什么活动日历并生成文章"
+- "calendar"
+- "danke calendar"
+- "daily reminder"
+- "/danke-calendar-skill"
+
+---
+
+## ⚠️ 核心铁律与事实准则
+
+1. **【100% 严格基于后台事实】**：
+   - 文章正文的各规则描述与备注，**必须 100% 严格使用后台/API 查询返回的实际文案与备注（即 `statusText` 与 `digestNote`）**；
+   - **严禁 AI 擅自扩写、推测或编造任何非后台配置的打卡建议/游戏攻略！**
+2. **【单行紧凑清单格式】**：
+   - 简短开篇后，使用自然的无序列表列出玩法名称、倒计时状态与备注。列表项保持单行，不使用数字序号、加粗小标题或 `>` 引用块，例如：
+     ```markdown
+     - 神秘商人：离本轮【神秘商人】结束还剩 3 天（记得助力后及时购买）
+     ```
+3. **【Frontmatter 元数据纯自动驱动（废弃正文宏占位符）】**：
+   - 往期推荐与二维码完全由 Frontmatter 中的 `recommendations:` 与 `qrcode_image:` 元数据声明；
+   - **正文中严禁书写 `{{往期推荐}}` 或 `{{扫码获取更多精彩}}` 等已废弃的旧版手工占位符**，排版编译引擎会自动在免责声明前注入对应模块；
+   - 往期推荐采用纯文本水平居中优雅链接风格（无小图标、无卡片图片）。
+4. **【专属封面固化规范】**：
+   - 封面底图统一使用全特工紫光专属原图（`assets/reminder_cover_bg.jpg`）；
+   - 封面文字统一渲染为双行居中：`弹壳特攻队\n每日日历`。
+5. **【目录与文件命名规范】**：
+   - 必须按短格式日期目录存放：`project/danke-creator/my-articles-md/提醒/YY.M.D/YY.M.D.md`（例如 `26.9.5/26.9.5.md`）。
+6. **【专有名词宏自动标注】**：
+   - 自动挂载 `auto_tag.py`，为游戏实体包裹 `{{...}}` 宏标签。
+
+---
+
+## 📝 标准 Frontmatter 与正文结构模板
+
+```yaml
+---
+title: "【弹壳日历】[M]月[D]日每日事项清单"
+social_title: "[M]月[D]日弹壳每日事项清单"
+summary: "[M]月[D]日《弹壳特攻队》全量[N]大玩法待办与倒计时清单汇总。"
+tags:
+  - 弹壳特攻队
+  - 游戏攻略
+  - 弹壳日历
+  - 每日待办
+cover: "./cover.png"
+cover_vertical: "./cover_vertical.png"
+author: "弹壳呱呱"
+date: YYYY-MM-DD
+lastmod: YYYY-MM-DD
+qrcode_image: "img://弹壳呱呱微信公众号二维码"
+recommendations:
+  - title: "【推荐文章一标题】"
+    url: ""
+  - title: "【推荐文章二标题】"
+    url: ""
+  - title: "【推荐文章三标题】"
+    url: ""
+---
+```
+
+### 正文模板
+
+```markdown
+![article-top](img://article-top){type=banner}
+
+# [M] 月 [D] 日弹壳每日事项清单
+
+各位特工大家早上好，我是呱呱！
+
+今天（[M] 月 [D] 日）游戏内各玩法的最新待办与事项提醒如下：
+
+- [玩法名称1]：[statusText1]（[digestNote1]）
+- [玩法名称2]：[statusText2]
+- [玩法名称3]：[statusText3]（[digestNote3]）
+
+---
+
+攻略创作不易，如果帮到了你，请大家多多**转发、点赞和关注**！你们的支持是呱呱持续输出干货的最大动力！
+
+【免责声明】本攻略纯属个人**经验分享**，**仅供参考**，不构成任何消费建议。游戏版本更新较快，具体数值以游戏内实际表现为准。本攻略所引用的美术图片及游戏内截图版权均归 Habby 公司所有。
+```
+
+---
+
+## 🛠️ 自动化执行命令
 
 ```bash
-# 1. 一键生成今日日历（含文章、封面、微信HTML编译、3:4切图，不发布草稿）
-python3 /Users/hbt/my-project/skills/danke-calendar-skill/scripts/generate_calendar.py
+# 生成今日日历清单（自动拉取数据、制作封面、生成文章并宏标注）
+python3 .agents/skills/danke-calendar-skill/scripts/generate_reminder.py
 
-# 2. 一键生成并直接发布至微信草稿箱
-python3 /Users/hbt/my-project/skills/danke-calendar-skill/scripts/generate_calendar.py --publish
-
-# 3. 指定特定日期生成（例如补发或预生成）
-python3 /Users/hbt/my-project/skills/danke-calendar-skill/scripts/generate_calendar.py --date 2026-09-17
-
-# 4. 仅生成 Markdown 文章与封面（跳过 HTML 编译与切图）
-python3 /Users/hbt/my-project/skills/danke-calendar-skill/scripts/generate_calendar.py --no-compile
+# 指定日期生成
+python3 .agents/skills/danke-calendar-skill/scripts/generate_reminder.py --date 2026-09-06
 ```
 
----
+## Codex 规则来源与输出
 
-## 11大玩法倒计时规则参考
-
-| 玩法名称 | 周期类型 | 重置基准 | 经典备注提示 |
-| :--- | :--- | :--- | :--- |
-| **神秘商人** | 3天循环 | 9.16剩1天 | 找好友助力砍完价再买，别原价当冤大头 |
-| **公会探索** | 每周周三23:59结 | 周四0点重置 | 做完探索任务千万记得打一下BOSS，不然没奖励 |
-| **日常挑战** | 3天循环 | 9.16剩3天 | 穿红甲直接挂机就行，只换芯片和核心 |
-| **试炼之路** | 5天循环 | 9.16剩4天 | 懒得爬塔的，记得卡个排名，18000后住的是单间 |
-| **周常** | 每周周日23:59结 | 周一0点重置 | 打不过的可以找人借号或者带打，奖励很丰厚 |
-| **联机挑战** | 每周周日23:59结 | 周一0点重置 | 一轮要打半小时左右，建议200万攻击以上打 |
-| **饼干与复活币**| 每周周日23:59结 | 周一0点重置 | 周常商店记得清空，优先换复活币和关键资源 |
-| **区域行动** | 14天循环 | 9.16剩8天 | 奖励也还可以，打不过的可以看看攻略 |
-| **回响之战** | 14天循环 | 9.16剩8天 | 实力达不到王者组记得也要在传说组卡个排名 |
-| **公会商店** | 每月最后一日结 | 次月1日0点重置 | 公会币不足的优先把重要的核心和传奇收藏品换了 |
-| **逃离行动** | 30天赛季 | 9.16剩24天 | 奖励很好但非常费时间，没空打的后台联系找我代肝 |
-
----
-
-## 产出目录结构
-
-```text
-my-articles-md/提醒/26.9.16/
-├── 26.9.16.md                         # 原始 Markdown 稿件
-└── dist/
-    ├── cover.png                      # 900x384 横屏封面
-    ├── cover_vertical.png             # 640x853 竖屏封面
-    ├── 26.9.16_stage1.md              # Stage 1 文本整理
-    ├── 26.9.16_stage2.md              # Stage 2 资源注入
-    ├── 26.9.16_stage3_wechat.html     # Stage 3 微信排版最终 HTML
-    ├── 26.9.16_stage3_wechat.json     # 标题、封面、作者元数据
-    └── 原生网页直切图_3x4/             # 3:4 切图卡片及小红书/抖音发布文案
-        ├── 01_切图.png
-        └── copywriting.txt
-```
+先调用 danke MCP 的 get_reminder_rules（date=目标日期，onlyDigest=true），将 text 中的 JSON 保存到文章 dist/digest.json，再传入 generate_reminder.py --date YYYY-MM-DD --digest-file <文章/dist/digest.json>。只有 MCP 返回成功且日期正确才能生成。接口不可用时停止，不使用简化 SQLite 算法推算。封面及排版、切图衍生产物均输出到文章 dist/；列表保留颜色提示但不使用加粗。
