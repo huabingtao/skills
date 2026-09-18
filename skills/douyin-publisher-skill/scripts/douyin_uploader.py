@@ -17,7 +17,7 @@ from pathlib import Path
 USER_DATA_DIR = Path.home() / ".douyin_user_data"
 STORAGE_STATE_PATH = Path.home() / ".douyin_storage_state.json"
 CREATOR_URL = "https://creator.douyin.com"
-UPLOAD_URL = f"{CREATOR_URL}/creator-micro/content/upload"
+UPLOAD_URL = f"{CREATOR_URL}/creator-micro/content/upload?default-tab=3"
 
 
 def _is_logged_in(page) -> bool:
@@ -122,6 +122,8 @@ def upload_image_post(
     title: str,
     body_text: str,
     headless: bool = True,
+    publish_now: bool = False,
+    review: bool = False,
 ):
     """
     Upload an image-text post to Douyin creator platform using persistent context.
@@ -147,7 +149,7 @@ def upload_image_post(
                 # Close headless browser and restart headed
                 context.close()
                 print("⚠️  Session 已失效，正在唤起有头浏览器进行扫码登录...")
-                return upload_image_post(playwright, image_paths, title, body_text, headless=False)
+                return upload_image_post(playwright, image_paths, title, body_text, headless=False, publish_now=publish_now, review=review)
             else:
                 # Prompt user to scan QR in current headed window
                 _wait_for_login(page, timeout_seconds=300)
@@ -158,10 +160,31 @@ def upload_image_post(
         print("📤 正在进入图文发布页面...")
         time.sleep(2)
 
+        # Dismiss any shepherd onboarding modal / overlay
+        try:
+            for btn_text in ["我知道了", "跳过", "下一步", "知道了", "关闭", "立即体验"]:
+                btn = page.locator(f'button:has-text("{btn_text}"), span:has-text("{btn_text}")').first
+                if btn.is_visible(timeout=500):
+                    btn.click(force=True)
+                    time.sleep(0.5)
+        except Exception:
+            pass
+
+        try:
+            page.evaluate("""() => {
+                document.querySelectorAll('.shepherd-modal-overlay-container, .shepherd-element, .shepherd-modal-is-visible, [class*="shepherd"], [class*="guide-overlay"]')
+                    .forEach(el => el.remove());
+            }""")
+        except Exception:
+            pass
+
         # Look for "发布图文" card on home page
         publish_card = page.locator('text=发布图文').first
         if publish_card.is_visible(timeout=3000):
-            publish_card.click()
+            try:
+                publish_card.click(force=True, timeout=5000)
+            except Exception:
+                publish_card.dispatch_event('click')
             time.sleep(3)
         else:
             print("⚠️ 未在首页找到'发布图文'卡片，直接跳转至发布页...")
@@ -170,11 +193,30 @@ def upload_image_post(
 
         # Switch to latest tab if opened in new tab
         if len(context.pages) > 1:
-            page = context.pages[-1]
-            print(f"🔗 切换到新标签页: {page.url}")
+            for p in context.pages:
+                if "/content/upload" in p.url:
+                    page = p
+                    break
+            else:
+                page = context.pages[-1]
+            print(f"🔗 当前选中标签页: {page.url}")
+
+        if "/content/upload" not in page.url:
+            print(f"🔄 正在强制导航至发布页: {UPLOAD_URL}")
+            page.goto(UPLOAD_URL, wait_until="domcontentloaded", timeout=20000)
+            time.sleep(3)
 
         page.wait_for_load_state("domcontentloaded", timeout=15000)
         time.sleep(2)
+
+        # Also dismiss any overlay on upload page
+        try:
+            page.evaluate("""() => {
+                document.querySelectorAll('.shepherd-modal-overlay-container, .shepherd-element, .shepherd-modal-is-visible, [class*="shepherd"]')
+                    .forEach(el => el.remove());
+            }""")
+        except Exception:
+            pass
 
         print(f"🔗 当前发布页 URL: {page.url}")
 
@@ -302,63 +344,117 @@ def upload_image_post(
         debug_path_filled = str(Path(image_paths[0]).parent / "_douyin_step3_filled.png")
         page.screenshot(path=debug_path_filled)
 
-        # 6. Scroll down to show bottom action buttons and click "Save Draft"
-        print("💾 正在向下滚动页面以寻找'保存草稿'按钮...")
+        # 6. Action: Review, Publish or Save Draft
         page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
         time.sleep(1)
 
-        # Additional selector list for Douyin creator platform draft button ("暂存离开")
-        draft_selectors = [
-            'button:has-text("暂存离开")',
-            'text=暂存离开',
-            'div:has-text("暂存离开")',
-            'button:has-text("存草稿")',
-            'button:has-text("保存草稿")',
-            'button:has-text("保存为草稿")',
-            'text=存草稿',
-            'text=保存草稿',
-            '[class*="draft"]',
-            '[class*="Draft"]',
-        ]
+        if review:
+            print("\n" + "=" * 50)
+            print("👀 页面已就绪！已为您停留在编辑页面供人工审核 (REVIEW MODE)")
+            print("=" * 50)
+            print("您可以直接在桌面浏览器中逐项核对：")
+            print("  1. 4 张切图与封面排版")
+            print("  2. 标题、文案与话题标签")
+            print("核对完毕后，您可直接在页面右下角手动点击【发布】或【暂存离开】。")
 
-        draft_saved = False
-        for selector in draft_selectors:
-            try:
-                candidate = page.locator(selector).last  # Bottom button
-                if candidate.is_visible(timeout=1500):
-                    candidate.scroll_into_view_if_needed()
-                    time.sleep(0.5)
-                    candidate.click(force=True)
-                    draft_saved = True
-                    print(f"   ✅ 已成功点击保存草稿 (selector: {selector})")
-                    break
-            except Exception:
-                continue
+        elif publish_now:
+            print("🚀 正在查找并点击'发布'按钮...")
+            publish_selectors = [
+                'button:has-text("高清发布")',
+                'button:has-text("发布")',
+                'button:has-text("立即发布")',
+                '[class*="publish-btn"]',
+                'div[role="button"]:has-text("发布")',
+                'text=发布',
+            ]
 
-        if not draft_saved:
-            # Take debugging screenshots after scrolling
-            debug_path_draft = str(Path(image_paths[0]).parent / "_douyin_draft_debug.png")
-            page.screenshot(path=debug_path_draft)
-            raise RuntimeError(
-                f"❌ 未找到'保存草稿'按钮。截图: {debug_path_draft}\n"
-                "请检查抖音创作者后台页面结构是否有变化。"
-            )
+            published = False
+            for selector in publish_selectors:
+                try:
+                    btn = page.locator(selector).last
+                    if btn.is_visible(timeout=2000):
+                        btn.scroll_into_view_if_needed()
+                        time.sleep(0.5)
+                        btn.click(force=True)
+                        published = True
+                        print(f"   ✅ 已成功点击发布按钮 (selector: {selector})")
+                        break
+                except Exception:
+                    continue
 
-        time.sleep(3)
+            if not published:
+                print("   ⚠️ 未能自动定位到'发布'按钮，浏览器将保持在桌面，您可以直接在窗口中手动点击【发布】")
+            else:
+                time.sleep(4)
+                # Check for secondary confirmation popups
+                for confirm_word in ["确定", "确认", "继续发布", "我知道了", "完成"]:
+                    try:
+                        c_btn = page.locator(f'button:has-text("{confirm_word}"), span:has-text("{confirm_word}")').last
+                        if c_btn.is_visible(timeout=1000):
+                            c_btn.click(force=True)
+                            print(f"   ✅ 点击弹窗确认: {confirm_word}")
+                            time.sleep(1)
+                    except Exception:
+                        pass
+
+            print("\n" + "=" * 50)
+            print("🚀 抖音图文发布指令已执行！(DOUYIN PUBLISHED)")
+            print("=" * 50)
+
+        else:
+            print("💾 正在向下滚动页面以寻找'保存草稿'按钮...")
+            # Additional selector list for Douyin creator platform draft button ("暂存离开")
+            draft_selectors = [
+                'button:has-text("暂存离开")',
+                'text=暂存离开',
+                'div:has-text("暂存离开")',
+                'button:has-text("存草稿")',
+                'button:has-text("保存草稿")',
+                'button:has-text("保存为草稿")',
+                'text=存草稿',
+                'text=保存草稿',
+                '[class*="draft"]',
+                '[class*="Draft"]',
+            ]
+
+            draft_saved = False
+            for selector in draft_selectors:
+                try:
+                    candidate = page.locator(selector).last  # Bottom button
+                    if candidate.is_visible(timeout=1500):
+                        candidate.scroll_into_view_if_needed()
+                        time.sleep(0.5)
+                        candidate.click(force=True)
+                        draft_saved = True
+                        print(f"   ✅ 已成功点击保存草稿 (selector: {selector})")
+                        break
+                except Exception:
+                    continue
+
+            if not draft_saved:
+                # Take debugging screenshots after scrolling
+                debug_path_draft = str(Path(image_paths[0]).parent / "_douyin_draft_debug.png")
+                page.screenshot(path=debug_path_draft)
+                raise RuntimeError(
+                    f"❌ 未找到'保存草稿'按钮。截图: {debug_path_draft}\n"
+                    "请检查抖音创作者后台页面结构是否有变化。"
+                )
+
+            print("\n" + "=" * 50)
+            print("🚀 抖音图文草稿保存成功！(DOUYIN DRAFT SAVED SUCCESSFULLY)")
+            print("=" * 50)
+            print("您现在可以前往抖音创作者后台'草稿箱'查看。")
+
+        time.sleep(2)
 
         # 7. Final verification
         debug_path_done = str(Path(image_paths[0]).parent / "_douyin_step4_done.png")
         page.screenshot(path=debug_path_done)
-
-        print("\n" + "=" * 50)
-        print("🚀 抖音图文草稿保存成功！(DOUYIN DRAFT SAVED SUCCESSFULLY)")
-        print("=" * 50)
-        print("您现在可以前往抖音创作者后台'草稿箱'查看。")
         print(f"📸 最终截图: {debug_path_done}")
 
         if not headless:
-            print("\n🌟 上传已完成！浏览器窗口将保持开启，方便您查看与操作。")
-            print("   （如需退出脚本，可直接手动关闭浏览器窗口）")
+            print("\n🌟 浏览器窗口已在桌面打开并保持开启，方便您查看与确认！")
+            print("   （如需关闭，可直接手动关闭浏览器窗口）")
             try:
                 page.wait_for_event("close", timeout=0)
             except Exception:
