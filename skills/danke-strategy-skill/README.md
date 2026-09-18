@@ -1,3 +1,7 @@
+> [!NOTE]
+> 📢 **Repository Migrated**: This skill has been migrated into the unified monorepo repository: [huabingtao/skills](https://github.com/huabingtao/skills).
+> For the latest updates, issues, and documentation, please visit [huabingtao/skills](https://github.com/huabingtao/skills).
+
 # 弹壳特攻队攻略美化与通用排版助手 (danke-strategy-skill)
 
 这是一个专为《弹壳特攻队》(Survivor.io) 设计的 **Gemini CLI 技能包与排版引擎**。它由一个通用的 Markdown-to-WeChat 排版引擎（`engine/`）和具体的游戏内容包（`packs/danke/`）组成，能将粗糙的原始攻略转化为排版精美、带自动配图、符合微信公众号后台发布标准的专业图文稿。

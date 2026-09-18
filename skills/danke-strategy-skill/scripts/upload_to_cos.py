@@ -16,9 +16,9 @@ import argparse
 from pathlib import Path
 
 # ─────────────── 腾讯云 COS 凭证（优先从环境变量读取） ──────────────────
-SECRET_ID  = os.environ.get("COS_SECRET_ID",  "")
-SECRET_KEY = os.environ.get("COS_SECRET_KEY",  "")
-BUCKET     = os.environ.get("COS_BUCKET",      "danke-1309453204")
+SECRET_ID  = os.environ.get("COS_SECRET_ID", "")
+SECRET_KEY = os.environ.get("COS_SECRET_KEY", "")
+BUCKET     = os.environ.get("COS_BUCKET", "danke-1309453204")
 
 # 自定义 CDN 域名（COS 存储桶已绑定）
 COS_BASE_URL = os.environ.get("COS_BASE_URL", "https://dankeres.guaguahub.cn")

@@ -56,22 +56,57 @@ def get_file_md5(file_path):
         return None
 
 
+GLOBAL_CACHE_FILE = os.path.expanduser("~/.wechat_image_cache_global.json")
+
+
 def load_cache(cache_file):
+    merged = {"content_images": {}, "thumb_materials": {}}
+    # 1. 优先加载全局共享缓存
+    if os.path.exists(GLOBAL_CACHE_FILE):
+        try:
+            with open(GLOBAL_CACHE_FILE, 'r', encoding='utf-8') as f:
+                g_data = json.load(f)
+                merged["content_images"].update(g_data.get("content_images", {}))
+                merged["thumb_materials"].update(g_data.get("thumb_materials", {}))
+        except Exception:
+            pass
+
+    # 2. 叠加上本地目录缓存
     if os.path.exists(cache_file):
         try:
             with open(cache_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                l_data = json.load(f)
+                merged["content_images"].update(l_data.get("content_images", {}))
+                merged["thumb_materials"].update(l_data.get("thumb_materials", {}))
         except Exception:
             pass
-    return {"content_images": {}, "thumb_materials": {}}
+
+    return merged
 
 
 def save_cache(cache, cache_file):
+    # 同步保存至本地目录
     try:
         with open(cache_file, 'w', encoding='utf-8') as f:
             json.dump(cache, f, ensure_ascii=False, indent=2)
     except Exception as e:
-        print(f"  ⚠ Failed to save cache: {e}")
+        print(f"  ⚠ Failed to save local cache: {e}")
+
+    # 同步写入全局共享缓存
+    try:
+        global_data = {"content_images": {}, "thumb_materials": {}}
+        if os.path.exists(GLOBAL_CACHE_FILE):
+            try:
+                with open(GLOBAL_CACHE_FILE, 'r', encoding='utf-8') as f:
+                    global_data = json.load(f)
+            except Exception:
+                pass
+        global_data["content_images"].update(cache.get("content_images", {}))
+        global_data["thumb_materials"].update(cache.get("thumb_materials", {}))
+        with open(GLOBAL_CACHE_FILE, 'w', encoding='utf-8') as f:
+            json.dump(global_data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"  ⚠ Failed to save global cache: {e}")
 
 
 def load_draft_cache(draft_cache_file):
@@ -148,6 +183,7 @@ def process_content_images(client, html_content, base_dir, cache, cache_file):
                     os.path.join(base_dir, clean_src.lstrip('/')),
                     os.path.join(base_dir, '..', clean_src),
                     os.path.join(base_dir, '..', '..', clean_src),
+                    os.path.join(os.path.dirname(base_dir), clean_src.lstrip('/')),
                     clean_src
                 ]
                 if 'danke-strategy-skill' in clean_src:
@@ -360,7 +396,7 @@ def publish_draft(
     metadata = load_content_metadata(content_path)
     title = title or metadata.get('title')
     author = author or metadata.get('author') or "弹壳呱呱"
-    cover_path = resolve_cover_path(cover_path or metadata.get('image'), content_path)
+    cover_path = resolve_cover_path(cover_path or metadata.get('cover') or metadata.get('image'), content_path)
 
     if not title:
         raise ValueError("Article title is required. Provide via --title or sidecar .json.")
@@ -371,6 +407,13 @@ def publish_draft(
     draft_cache = load_draft_cache(draft_cache_file)
     cached_entry = draft_cache.get(html_abs_path)
 
+    if not force_new and not cached_entry:
+        target_name = os.path.basename(html_abs_path)
+        for k, v in draft_cache.items():
+            if os.path.basename(k) == target_name:
+                cached_entry = v
+                break
+
     existing_media_id = cached_html_hash = cached_cover_hash = None
     if not force_new and cached_entry:
         if isinstance(cached_entry, dict):
@@ -379,6 +422,7 @@ def publish_draft(
             cached_cover_hash = cached_entry.get("cover_hash")
         else:
             existing_media_id = cached_entry
+
 
     print("\n" + "="*50)
     print("🚀 PRE-FLIGHT CHECK")
@@ -466,9 +510,7 @@ def publish_draft(
             print("您现在可以前往微信公众号后台‘草稿箱’查看。")
             return PublishResult(media_id=existing_media_id, action="update")
         except Exception as e:
-            if "invalid media_id" not in str(e).lower() and "40007" not in str(e):
-                raise
-            print(f"\n⚠ Warning: Existing draft MediaID {existing_media_id} not found (may have been deleted).")
+            print(f"\n⚠ Warning: Failed to update existing draft MediaID {existing_media_id} ({e}).")
             print(f"→ Falling back to create a new draft instead: '{title}'...")
     else:
         print(f"→ Creating draft: '{title}'...")

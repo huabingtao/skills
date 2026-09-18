@@ -87,7 +87,8 @@ class WeChatClient:
         else:
             response = requests.post(url)
 
-        return response.json()
+        response.encoding = 'utf-8'
+        return json.loads(response.content.decode('utf-8'))
 
     def _post_with_retry(self, path_suffix: str, files_builder_func=None, json_data: Optional[Dict[str, Any]] = None, headers: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         files = files_builder_func() if files_builder_func else None
@@ -169,15 +170,23 @@ class WeChatClient:
     def update_draft(self, media_id: str, title: str, html_content: str, thumb_media_id: str,
                      index: int = 0, author: str = "Admin", digest: str = "", show_cover_pic: int = 1,
                      need_open_comment: int = 1, only_fans_can_comment: int = 0) -> None:
+        article_data = {
+            "title": title, "author": author, "digest": digest,
+            "content": html_content, "thumb_media_id": thumb_media_id,
+            "show_cover_pic": show_cover_pic, "need_open_comment": need_open_comment,
+            "only_fans_can_comment": only_fans_can_comment,
+            "pic_crop_235_1": "0_0_1_1",
+            "pic_crop_1_1": "0_0_1_1"
+        }
         update_data = {
             "media_id": media_id, "index": index,
-            "articles": {
-                "title": title, "author": author, "digest": digest,
-                "content": html_content, "thumb_media_id": thumb_media_id,
-                "show_cover_pic": show_cover_pic, "need_open_comment": need_open_comment,
-                "only_fans_can_comment": only_fans_can_comment
-            }
+            "articles": article_data
         }
         result = self._post_with_retry("/draft/update", json_data=update_data)
         if result.get("errcode", 0) != 0:
-            raise Exception(f"Failed to update draft: {result.get('errmsg')} (Code: {result.get('errcode')})")
+            # Retry without pic_crop fields in case the error is caused by crop parameters
+            article_data.pop("pic_crop_235_1", None)
+            article_data.pop("pic_crop_1_1", None)
+            result = self._post_with_retry("/draft/update", json_data=update_data)
+            if result.get("errcode", 0) != 0:
+                raise Exception(f"Failed to update draft: {result.get('errmsg')} (Code: {result.get('errcode')})")

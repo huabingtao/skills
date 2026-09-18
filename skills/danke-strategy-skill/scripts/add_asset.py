@@ -39,9 +39,9 @@ MAPPING_LOCAL = PACK_ROOT / "image_mapping.json"
 MAPPING_COS   = PACK_ROOT / "image_mapping_cos.json"
 
 # ─────────────── COS 配置 ────────────────────────────────────────────────────
-SECRET_ID  = os.environ.get("COS_SECRET_ID",  "")
-SECRET_KEY = os.environ.get("COS_SECRET_KEY",  "")
-BUCKET     = os.environ.get("COS_BUCKET",      "danke-1309453204")
+SECRET_ID  = os.environ.get("COS_SECRET_ID", "")
+SECRET_KEY = os.environ.get("COS_SECRET_KEY", "")
+BUCKET     = os.environ.get("COS_BUCKET", "danke-1309453204")
 REGION     = os.environ.get("COS_REGION",      "ap-guangzhou")
 COS_BASE_URL = "https://dankeres.guaguahub.cn"
 

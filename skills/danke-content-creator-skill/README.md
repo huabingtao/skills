@@ -1,3 +1,7 @@
+> [!NOTE]
+> 📢 **Repository Migrated**: This skill has been migrated into the unified monorepo repository: [huabingtao/skills](https://github.com/huabingtao/skills).
+> For the latest updates, issues, and documentation, please visit [huabingtao/skills](https://github.com/huabingtao/skills).
+
 # danke-content-creator-skill
 
 > **职责**：分析弹壳特攻队原始素材（截图/文本/数据），按标准模板生成初稿 `攻略.md`。

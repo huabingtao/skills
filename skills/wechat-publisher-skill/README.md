@@ -1,3 +1,7 @@
+> [!NOTE]
+> 📢 **Repository Migrated**: This skill has been migrated into the unified monorepo repository: [huabingtao/skills](https://github.com/huabingtao/skills).
+> For the latest updates, issues, and documentation, please visit [huabingtao/skills](https://github.com/huabingtao/skills).
+
 # wechat-publisher-skill
 
 > **职责**：将任意 `_wechat.html` 发布到微信公众号草稿箱。

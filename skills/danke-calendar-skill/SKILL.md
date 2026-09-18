@@ -52,16 +52,16 @@ description: "专为《弹壳特攻队》每日活动待办与倒计时日历打
 
 ```yaml
 ---
-title: "【弹壳日历】[M]月[D]日每日事项清单"
-social_title: "[M]月[D]日弹壳每日事项清单"
-summary: "[M]月[D]日《弹壳特攻队》全量[N]大玩法待办与倒计时清单汇总。"
+title: "【弹壳日历】[YY]年[M]月[D]日"
+social_title: "[YY]年[M]月[D]日弹壳日历"
+summary: "[YY]年[M]月[D]日《弹壳特攻队》全量[N]大玩法待办与倒计时清单汇总。"
 tags:
   - 弹壳特攻队
   - 游戏攻略
   - 弹壳日历
   - 每日待办
-cover: "./cover.png"
-cover_vertical: "./cover_vertical.png"
+cover: "./dist/cover.png"
+cover_vertical: "./dist/cover_vertical.png"
 author: "弹壳呱呱"
 date: YYYY-MM-DD
 lastmod: YYYY-MM-DD
@@ -81,11 +81,11 @@ recommendations:
 ```markdown
 ![article-top](img://article-top){type=banner}
 
-# [M] 月 [D] 日弹壳每日事项清单
+# [YY] 年 [M] 月 [D] 日弹壳日历
 
-各位特工大家早上好，我是呱呱！
+各位特工大家[早上好/中午好/下午好/晚上好]，我是呱呱！
 
-今天（[M] 月 [D] 日）游戏内各玩法的最新待办与事项提醒如下：
+今天（[YY] 年 [M] 月 [D] 日）游戏内各玩法的最新待办与事项提醒如下：
 
 - [玩法名称1]：[statusText1]（[digestNote1]）
 - [玩法名称2]：[statusText2]

@@ -104,6 +104,21 @@ def highlight_urgent_status(status_text: str, days_remaining: int, is_redeem_day
     return status_text
 
 
+def get_time_greeting(dt: datetime.datetime = None) -> str:
+    """根据生成时刻动态返回问候语：早上好 / 中午好 / 下午好 / 晚上好"""
+    if dt is None:
+        dt = datetime.datetime.now()
+    hour = dt.hour
+    if 5 <= hour < 12:
+        return "早上好"
+    elif 12 <= hour < 14:
+        return "中午好"
+    elif 14 <= hour < 18:
+        return "下午好"
+    else:
+        return "晚上好"
+
+
 def build_reminder_article(data: dict) -> str:
     """严格基于后台数据组装极简日历清单 Markdown 文章，往期推荐使用 Frontmatter recommendations 元数据"""
     import random
@@ -122,10 +137,12 @@ def build_reminder_article(data: dict) -> str:
     random.seed(int(dt.strftime("%Y%m%d")))
     selected_articles = random.sample(RECOMMENDED_ARTICLES_POOL, min(3, len(RECOMMENDED_ARTICLES_POOL)))
 
+    greeting = get_time_greeting()
+
     lines = []
     lines.append("---")
-    lines.append(f'title: "【弹壳日历】{yy}年{month}月{day}日每日事项清单"')
-    lines.append(f'social_title: "{yy}年{month}月{day}日弹壳每日事项清单"')
+    lines.append(f'title: "【弹壳日历】{yy}年{month}月{day}日"')
+    lines.append(f'social_title: "{yy}年{month}月{day}日弹壳日历"')
     lines.append(f'summary: "{yy}年{month}月{day}日《弹壳特攻队》全量{count}大玩法待办与倒计时清单汇总。"')
     lines.append("tags:")
     lines.append("  - 弹壳特攻队")
@@ -146,9 +163,9 @@ def build_reminder_article(data: dict) -> str:
     lines.append("")
     lines.append("![article-top](img://article-top){type=banner}")
     lines.append("")
-    lines.append(f"# {yy} 年 {month} 月 {day} 日弹壳每日事项清单")
+    lines.append(f"# {yy} 年 {month} 月 {day} 日弹壳日历")
     lines.append("")
-    lines.append("各位特工大家早上好，我是呱呱！")
+    lines.append(f"各位特工大家{greeting}，我是呱呱！")
     lines.append("")
     lines.append(f"今天（{yy} 年 {month} 月 {day} 日）游戏内各玩法的最新待办与事项提醒如下：")
     lines.append("")

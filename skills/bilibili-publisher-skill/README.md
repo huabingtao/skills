@@ -1,3 +1,7 @@
+> [!NOTE]
+> 📢 **Repository Migrated**: This skill has been migrated into the unified monorepo repository: [huabingtao/skills](https://github.com/huabingtao/skills).
+> For the latest updates, issues, and documentation, please visit [huabingtao/skills](https://github.com/huabingtao/skills).
+
 # bilibili-publisher-skill
 
 > **职责**：将 3:4 切图集与攻略元数据自动上传至 B站 (哔哩哔哩) 创作者中心草稿箱。

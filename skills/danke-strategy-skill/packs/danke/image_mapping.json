@@ -99,7 +99,7 @@
   "传奇收藏品宝箱": "assets/img/宝箱/传奇收藏品宝箱.png",
   "传奇收藏品白羊座星辉": "assets/img/收藏品/传奇收藏品/第10期/白羊座星辉.png",
   "传奇收藏品箱": "assets/img/宝箱/传奇收藏品宝箱.png",
-  "传奇收藏品结构机": "assets/img/道具/传奇收藏品解构机.png",
+  "传奇收藏品结构机": "assets/img/传奇收藏品结构机.png",
   "传奇配件自选": "assets/img/宝箱/传奇配件自选宝箱.png",
   "传奇配件自选宝箱": "assets/img/宝箱/传奇配件自选宝箱.png",
   "传奇配件自选礼包": "assets/img/宝箱/传奇配件自选宝箱.png",
@@ -365,7 +365,7 @@
   "紧急冰冻": "assets/img/技能图标/宠物技能/紧急冰冻.png",
   "红星": "assets/img/其它/红星.png",
   "纳米拟态面具": "assets/img/收藏品/传奇收藏品/第5期/纳米拟态面具.png",
-  "结构机": "assets/img/道具/传奇收藏品解构机.png",
+  "结构机": "assets/img/传奇收藏品结构机.png",
   "维度箔": "assets/img/收藏品/传奇收藏品/第7期/维度箔.png",
   "维托尔": "assets/img/特工/维托尔.png",
   "缴械": "assets/img/技能图标/战斗中debuff/缴械.png",
@@ -459,7 +459,5 @@
   "📋": "assets/img/宝箱/核心自选宝箱.png",
   "📦": "assets/img/宝箱/s级杰出装备自选宝箱.png",
   "🛒": "assets/img/道具/神炼核心.png",
-  "抽奖券": "assets/img/道具/神炼核心.png",
-  "传奇收藏品解构机": "assets/img/道具/传奇收藏品解构机.png",
-  "解构机": "assets/img/道具/传奇收藏品解构机.png"
+  "抽奖券": "assets/img/道具/神炼核心.png"
 }
