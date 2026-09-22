@@ -37,9 +37,9 @@ The skill utilizes a Python script located at `scripts/video_to_gif.py` which wr
 
 ### Execution Example (运行示例):
 ```bash
-python3 /Users/hbt/my-project/skills/video-to-gif/scripts/video_to_gif.py \
-  --input "/Users/hbt/my-project/content/danke/my-articles-md/活动攻略/特卖超市/活动玩法.mp4" \
-  --output "/Users/hbt/my-project/content/danke/my-articles-md/活动攻略/特卖超市/活动玩法.gif" \
+python3 .agents/skills/video-to-gif/scripts/video_to_gif.py \
+  --input "input.mp4" \
+  --output "output.gif" \
   --fps 10 \
   --width 320 \
   --max-size 30

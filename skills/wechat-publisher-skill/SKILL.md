@@ -14,7 +14,7 @@ description: 将任意微信公众号格式的 _wechat.html 文件一键发布�
 ## 使用方法
 
 ```bash
-python3 /Users/hbt/my-project/skills/wechat-publisher-skill/scripts/publish.py \
+python3 .agents/skills/wechat-publisher-skill/scripts/publish.py \
   -c <_wechat.html 路径> \
   [--cover <封面图>] \
   [--new]

@@ -11,6 +11,7 @@ import sys
 import json
 import re
 import argparse
+from pathlib import Path
 
 def load_keywords(mapping_path):
     if not os.path.exists(mapping_path):
@@ -69,9 +70,10 @@ def process_file(file_path: str, mapping_path: str, in_place: bool = False, outp
     print(f"✅ 成功完成宏标签自动标注: {out_file}")
 
 def main():
+    default_mapping = str(Path(__file__).resolve().parents[1] / "packs" / "danke" / "image_mapping.json")
     parser = argparse.ArgumentParser(description="自动为 Markdown 中的弹壳专有名词添加 {{宏标签}}")
     parser.add_argument("input_file", help="输入 Markdown 文件路径")
-    parser.add_argument("-m", "--mapping", default="/home/guagua/workspace/skill/danke-strategy-skill/packs/danke/image_mapping.json", help="image_mapping.json 路径")
+    parser.add_argument("-m", "--mapping", default=default_mapping, help="image_mapping.json 路径")
     parser.add_argument("-i", "--in-place", action="store_true", help="直接原地修改输入文件")
     parser.add_argument("-o", "--output", help="输出文件路径")
     args = parser.parse_args()

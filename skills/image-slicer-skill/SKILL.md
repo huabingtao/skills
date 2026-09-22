@@ -36,9 +36,9 @@ The skill utilizes a Python script located at `scripts/slice_image.py`. It requi
 
 ### Execution Example (运行示例):
 ```bash
-python3 /Users/hbt/my-project/image-slicer-skill/scripts/slice_image.py \
-  --image "/Users/hbt/拆包素材/media__1780830921684.png" \
-  --output "/Users/hbt/拆包素材/切图/chests/" \
+python3 .agents/skills/image-slicer-skill/scripts/slice_image.py \
+  --image "spritesheet.png" \
+  --output "output_dir/" \
   --prefix "chest" \
   --min-size 50
 ```

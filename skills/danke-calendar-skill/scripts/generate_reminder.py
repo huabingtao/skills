@@ -23,9 +23,14 @@ def find_workspace_root() -> Path:
     for parent in current.parents:
         if (parent / "content" / "danke-creator").is_dir() or (parent / "project" / "danke-creator").is_dir():
             return parent
-    if Path("/Users/hbt/my-project").is_dir():
-        return Path("/Users/hbt/my-project")
-    return Path("/home/guagua/workspace")
+    cwd = Path.cwd()
+    if (cwd / "content" / "danke-creator").is_dir() or (cwd / "project" / "danke-creator").is_dir():
+        return cwd
+    if env_root := os.environ.get("WORKSPACE_ROOT"):
+        if Path(env_root).is_dir():
+            return Path(env_root)
+    return cwd
+
 
 
 def to_short_date_str(date_obj: datetime.date) -> str:

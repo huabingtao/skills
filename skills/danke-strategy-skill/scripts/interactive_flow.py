@@ -8,6 +8,7 @@ import os
 import sys
 import re
 import json
+from pathlib import Path
 
 # Add project root to sys.path
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -313,12 +314,13 @@ def main():
 
     # ==================== STAGE 4 (已迁移) ====================
     # 微信发布能力已独立为 wechat-publisher-skill，请单独调用：
-    #
-    #   python3 /home/guagua/workspace/.agents/skills/wechat-publisher-skill/scripts/publish.py \
-    #     -c <_wechat.html 路径>
+    skill_root = Path(__file__).resolve().parents[1]
+    sibling_pub = skill_root.parent / "wechat-publisher-skill" / "scripts" / "publish.py"
+    pub_cmd = f"python3 {sibling_pub} -c {stage3_path}" if sibling_pub.is_file() else f"python3 .agents/skills/wechat-publisher-skill/scripts/publish.py -c {stage3_path}"
+
     print(f"\n✅ [Stage 3] 完成！HTML 已保存至：\n   {stage3_path}")
     print("\n💡 如需发布到微信公众号草稿箱，请使用 wechat-publisher-skill：")
-    print(f"   python3 /home/guagua/workspace/.agents/skills/wechat-publisher-skill/scripts/publish.py -c {stage3_path}")
+    print(f"   {pub_cmd}")
 
 
 

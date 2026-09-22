@@ -23,8 +23,7 @@ description: 批量自动兑换《弹壳特攻队》官网礼包码，支持离�
 你可以使用以下命令运行脚本：
 
 ```bash
-# 使用虚拟环境中的 Python 运行脚本
-/Users/hbt/my-project/skills/danke-redeem-skill/venv/bin/python3 /Users/hbt/my-project/skills/danke-redeem-skill/scripts/redeem.py --file <玩家ID文件路径> --code <兑换码> --output <输出报告路径>
+python3 .agents/skills/danke-redeem-skill/scripts/redeem.py --file <玩家ID文件路径> --code <兑换码> --output <输出报告路径>
 ```
 
 **参数说明：**
@@ -36,4 +35,5 @@ description: 批量自动兑换《弹壳特攻队》官网礼包码，支持离�
 ### 3. 让 AI 助手帮我运行
 
 你可以直接在对话中发送类似以下的要求：
-> 帮我把文件 `/Users/hbt/ids.txt` 里的玩家 ID 用兑换码 `中秋节快乐` 进行兑换，结果保存到 `/Users/hbt/result.xlsx`。
+> 帮我把文件 `ids.txt` 里的玩家 ID 用兑换码 `中秋节快乐` 进行兑换，结果保存到 `result.xlsx`。
+

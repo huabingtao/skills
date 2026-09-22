@@ -16,6 +16,31 @@ import json
 import re
 from bs4 import BeautifulSoup
 from PIL import Image
+from pathlib import Path
+
+def find_danke_strategy_dir():
+    """动态探测平级、全局或当前工作区中的 danke-strategy-skill 目录"""
+    current_script = Path(__file__).resolve()
+    candidates = [
+        # 同级技能 monorepo (例如 skills/skills/danke-strategy-skill)
+        current_script.parents[2] / "danke-strategy-skill",
+        # 针对以 .agents/skills 为根目录的情况
+        current_script.parents[1].parent / "danke-strategy-skill",
+        # 用户全局技能目录
+        Path.home() / ".agents" / "skills" / "danke-strategy-skill",
+        Path.home() / ".gemini" / "config" / "skills" / "danke-strategy-skill",
+        # 当前工作区目录
+        Path.cwd() / "skills" / "danke-strategy-skill",
+        Path.cwd() / ".agents" / "skills" / "danke-strategy-skill",
+    ]
+    if env_dir := os.environ.get("AGENT_SKILLS_DIR"):
+        candidates.insert(0, Path(env_dir) / "danke-strategy-skill")
+
+    for cand in candidates:
+        if cand.is_dir():
+            return cand
+    return None
+
 
 def get_playwright_engine():
     try:
@@ -48,11 +73,10 @@ def resolve_wechat_html(file_path):
             return wechat_html
 
         # 若未编译或 .md 有更新，调用 danke-strategy-skill 编译器进行完整编译
-        compile_script = "/home/guagua/workspace/skill/danke-strategy-skill/scripts/compile.py"
-        if not os.path.exists(compile_script):
-            compile_script = "/home/guagua/workspace/.agents/skills/danke-strategy-skill.backup/scripts/compile.py"
+        danke_dir = find_danke_strategy_dir()
+        compile_script = str(danke_dir / "scripts" / "compile.py") if danke_dir else None
 
-        if os.path.exists(compile_script):
+        if compile_script and os.path.exists(compile_script):
             print(f"🔄 检测到 Markdown 文件，正在通过 danke-strategy-skill 编译全量宏图标与图床样式: {abs_path}")
             res = subprocess.run([sys.executable, compile_script, abs_path], capture_output=True, text=True)
             if res.returncode != 0:
@@ -149,6 +173,9 @@ def direct_slice_html(input_file_path, output_dir=None, target_width=1080, targe
                 text_node.replace_with(new_t)
 
     # 2.2 预处理 HTML 中的图片路径，确保本地相对路径转换为绝对 file:// 协议
+    danke_dir = find_danke_strategy_dir()
+    danke_img_dir = str(danke_dir / "packs" / "danke" / "assets" / "img") if danke_dir else None
+
     for img in soup.find_all('img'):
         src = img.get('src', '')
         if src and not src.startswith(('http://', 'https://', 'data:', 'file://')):
@@ -156,8 +183,9 @@ def direct_slice_html(input_file_path, output_dir=None, target_width=1080, targe
                 os.path.normpath(os.path.join(html_dir, src)),
                 os.path.normpath(os.path.join(os.path.dirname(html_dir), src)),
                 os.path.normpath(os.path.join(os.getcwd(), src)),
-                os.path.normpath(os.path.join("/home/guagua/workspace/skill/danke-strategy-skill/packs/danke/assets/img", os.path.basename(src)))
             ]
+            if danke_img_dir:
+                candidates.append(os.path.normpath(os.path.join(danke_img_dir, os.path.basename(src))))
             for cand in candidates:
                 if os.path.exists(cand):
                     img['src'] = 'file://' + cand

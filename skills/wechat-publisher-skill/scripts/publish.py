@@ -25,6 +25,7 @@ import hashlib
 import tempfile
 import urllib.parse
 from dataclasses import dataclass
+from pathlib import Path
 
 import requests
 
@@ -188,8 +189,16 @@ def process_content_images(client, html_content, base_dir, cache, cache_file):
                 ]
                 if 'danke-strategy-skill' in clean_src:
                     idx = clean_src.find('danke-strategy-skill')
-                    potential_paths.append(os.path.join('/Users/hbt/my-project/skills', clean_src[idx:]))
-                    potential_paths.append(os.path.join('/home/guagua/workspace/.agents/skills', clean_src[idx:]))
+                    rel_sub = clean_src[idx:]
+                    for s_dir in [
+                        Path(__file__).resolve().parents[2],
+                        Path(__file__).resolve().parents[1].parent,
+                        Path.home() / ".agents" / "skills",
+                        Path.home() / ".gemini" / "config" / "skills",
+                        Path.cwd() / "skills",
+                        Path.cwd() / ".agents" / "skills",
+                    ]:
+                        potential_paths.append(str(s_dir / rel_sub))
 
                 upload_path = None
                 for path in potential_paths:
@@ -205,8 +214,18 @@ def process_content_images(client, html_content, base_dir, cache, cache_file):
                     search_roots = [
                         base_dir,
                         os.path.abspath(os.path.join(base_dir, '..')),
-                        '/Users/hbt/my-project/skills/danke-strategy-skill/packs/danke/assets'
                     ]
+                    for s_dir in [
+                        Path(__file__).resolve().parents[2],
+                        Path(__file__).resolve().parents[1].parent,
+                        Path.home() / ".agents" / "skills",
+                        Path.home() / ".gemini" / "config" / "skills",
+                        Path.cwd() / "skills",
+                        Path.cwd() / ".agents" / "skills",
+                    ]:
+                        danke_assets = s_dir / "danke-strategy-skill" / "packs" / "danke" / "assets"
+                        if danke_assets.is_dir():
+                            search_roots.append(str(danke_assets))
                     for s_root in search_roots:
                         if not os.path.isdir(s_root):
                             continue

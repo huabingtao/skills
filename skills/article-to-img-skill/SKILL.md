@@ -35,16 +35,17 @@ description: "直接渲染经过 danke-strategy-skill 编译的微信文章 _wec
 
 ```bash
 # 标准用法：传入经 danke-strategy-skill 编译后的 HTML 文件
-python3 /home/guagua/workspace/skill/article-to-img-skill/scripts/export_cards.py <_wechat.html路径> [-o 输出目录]
+python3 .agents/skills/article-to-img-skill/scripts/export_cards.py <dist/文章_stage3_wechat.html> [-o 输出目录]
 
 # 快捷用法：若传入 .md，会自动调用 danke-strategy-skill 编译后再切图
-python3 /home/guagua/workspace/skill/article-to-img-skill/scripts/export_cards.py <Markdown文件路径> [-o 输出目录]
+python3 .agents/skills/article-to-img-skill/scripts/export_cards.py <文章.md> [-o 输出目录]
 ```
 
 ### 示例：
 ```bash
-# 切割周年庆 Day9 攻略
-python3 /home/guagua/workspace/skill/article-to-img-skill/scripts/export_cards.py /home/guagua/workspace/project/danke-creator/my-articles-md/活动/4周年庆活动介绍/周年庆每天进度/day9/弹壳特攻队4周年庆Day9_wechat.html
+# 切割文章示例
+python3 .agents/skills/article-to-img-skill/scripts/export_cards.py project/danke-creator/my-articles-md/活动/4周年庆活动介绍/周年庆每天进度/day9/dist/弹壳特攻队4周年庆Day9_stage3_wechat.html
+
 ```
 
 ---

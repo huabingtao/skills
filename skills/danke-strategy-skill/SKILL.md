@@ -38,8 +38,8 @@ description: 专为《弹壳特攻队》攻略提供一键美化排版与微信�
 
 ### 阶段四：按用户请求发布至微信公众号
 
-排版脚本止于 HTML 编译，只显示发布命令。仅当用户要求发布或上传草稿时，再读取并调用独立的 wechat-publisher-skill。
-1. **草稿生成与缓存优先覆盖**：在后台调用 `/home/guagua/workspace/.agents/skills/wechat-publisher-skill/scripts/publish.py -c <_wechat.html>` 自动上传文章中的本地图片素材，并通过 MD5 缓存去重。全流程默认读取本地 `.wechat_draft_cache.json` 中的 `MediaID` 覆盖更新已有草稿，防止微信后台产生重复冗余草稿；仅在明确指定 `--new` 时创建全新草稿。
+1. **草稿生成与缓存优先覆盖**：在后台调用 `python3 .agents/skills/wechat-publisher-skill/scripts/publish.py -c <dist/文章_stage3_wechat.html>` 自动上传文章中的本地图片素材，并通过 MD5 缓存去重。全流程默认读取本地 `.wechat_draft_cache.json` 中的 `MediaID` 覆盖更新已有草稿，防止微信后台产生重复冗余草稿；仅在明确指定 `--new` 时创建全新草稿。
+
 
 
 ---
