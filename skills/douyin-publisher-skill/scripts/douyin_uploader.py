@@ -43,13 +43,48 @@ def _is_logged_in(page) -> bool:
     return False
 
 
-def _wait_for_login(page, timeout_seconds=300):
+def _wait_for_login(page, timeout_seconds=300, qr_dir=None):
     """Block until the user completes QR-code login."""
     print("\n" + "=" * 50)
     print("📱 请使用抖音 App 扫码登录")
     print(f"   超时时间：{timeout_seconds} 秒")
     print("   登录成功后将自动继续...")
     print("=" * 50 + "\n")
+
+    # Take screenshot and crop clean QR code after initial rendering
+    time.sleep(3)
+    target_qr_dir = qr_dir
+    if not target_qr_dir or not Path(target_qr_dir).exists():
+        target_qr_dir = Path("/home/guagua/workspace/project/danke-creator/my-articles-md/载具/从入门到入土-载具篇/dist")
+    if not target_qr_dir.exists():
+        target_qr_dir = Path.cwd()
+
+    qr_path = Path(target_qr_dir) / "抖音扫码登录.png"
+    
+    def _save_cropped_qr():
+        try:
+            temp_full = Path(target_qr_dir) / "_temp_full_login.png"
+            page.screenshot(path=str(temp_full))
+            from PIL import Image
+            im = Image.open(str(temp_full))
+            w, h = im.size
+            # In 1280x720 or 1280x900, crop around center modal QR code
+            if w >= 1200 and h >= 700:
+                cy = int(h * 0.49) if h >= 850 else 445
+                qr_crop = im.crop((530, cy - 140, 830, cy + 140))
+                qr_crop.save(str(qr_path))
+            else:
+                im.save(str(qr_path))
+            if temp_full.exists():
+                temp_full.unlink()
+            print(f"📸 登录二维码已精准保存至: {qr_path}")
+        except Exception as e:
+            try:
+                page.screenshot(path=str(qr_path))
+            except Exception:
+                pass
+
+    _save_cropped_qr()
 
     deadline = time.time() + timeout_seconds
     last_remaining = timeout_seconds
@@ -67,6 +102,8 @@ def _wait_for_login(page, timeout_seconds=300):
         remaining = int(deadline - time.time())
         if remaining != last_remaining and remaining % 30 == 0 and remaining > 0:
             print(f"⏳ 等待扫码中... 剩余 {remaining} 秒")
+            # Refresh screenshot periodically in case QR refreshed
+            _save_cropped_qr()
             last_remaining = remaining
         time.sleep(1)
 
@@ -80,9 +117,16 @@ def login(playwright):
     context = playwright.chromium.launch_persistent_context(
         user_data_dir=str(USER_DATA_DIR),
         headless=False,
-        args=["--no-sandbox", "--disable-setuid-sandbox"],
+        args=[
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--window-position=50,50",
+            "--window-size=1280,900",
+            "--start-maximized",
+        ],
     )
     page = context.pages[0] if context.pages else context.new_page()
+    page.bring_to_front()
 
     page.goto(CREATOR_URL, wait_until="domcontentloaded", timeout=20000)
     _wait_for_login(page, timeout_seconds=300)
@@ -134,9 +178,16 @@ def upload_image_post(
     context = playwright.chromium.launch_persistent_context(
         user_data_dir=str(USER_DATA_DIR),
         headless=headless,
-        args=["--no-sandbox", "--disable-setuid-sandbox"],
+        args=[
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--window-position=50,50",
+            "--window-size=1280,900",
+            "--start-maximized",
+        ],
     )
     page = context.pages[0] if context.pages else context.new_page()
+    page.bring_to_front()
 
     try:
         # 1. Validate session, prompt for scan if needed
@@ -152,7 +203,8 @@ def upload_image_post(
                 return upload_image_post(playwright, image_paths, title, body_text, headless=False, publish_now=publish_now, review=review)
             else:
                 # Prompt user to scan QR in current headed window
-                _wait_for_login(page, timeout_seconds=300)
+                out_dir = Path(image_paths[0]).parent.parent if image_paths else None
+                _wait_for_login(page, timeout_seconds=300, qr_dir=out_dir)
 
         print("✅ 登录状态有效")
 
