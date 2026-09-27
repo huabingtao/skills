@@ -246,6 +246,10 @@ def direct_slice_html(input_file_path, output_dir=None, target_width=1080, targe
             document.body.style.padding = '50px 40px 40px 40px';
             document.body.style.background = '#ffffff';
             document.body.style.boxSizing = 'border-box';
+            document.body.style.maxWidth = '1080px';
+            document.body.style.overflowX = 'hidden';
+            document.documentElement.style.maxWidth = '1080px';
+            document.documentElement.style.overflowX = 'hidden';
 
             // 严格区分微型宏图标、article-top Banner 与普通大图
             document.querySelectorAll('img').forEach(img => {
@@ -323,9 +327,10 @@ def direct_slice_html(input_file_path, output_dir=None, target_width=1080, targe
                 if (grid4Imgs.length > 0) {
                     parent.style.display = 'flex';
                     parent.style.flexDirection = 'row';
-                    parent.style.flexWrap = 'nowrap';
+                    parent.style.flexWrap = 'wrap';
                     parent.style.justifyContent = 'space-between';
                     parent.style.alignItems = 'flex-start';
+                    parent.style.rowGap = '12px';
                     parent.style.width = '100%';
                     parent.style.margin = '12px 0';
                     parent.style.clear = 'both';
@@ -345,9 +350,10 @@ def direct_slice_html(input_file_path, output_dir=None, target_width=1080, targe
                 } else if (grid2Imgs.length > 0) {
                     parent.style.display = 'flex';
                     parent.style.flexDirection = 'row';
-                    parent.style.flexWrap = 'nowrap';
+                    parent.style.flexWrap = 'wrap';
                     parent.style.justifyContent = 'space-between';
                     parent.style.alignItems = 'flex-start';
+                    parent.style.rowGap = '12px';
                     parent.style.width = '100%';
                     parent.style.margin = '12px 0';
                     parent.style.clear = 'both';
@@ -410,9 +416,15 @@ def direct_slice_html(input_file_path, output_dir=None, target_width=1080, targe
     full_img = Image.open(full_page_path)
     img_w, img_h = full_img.size
 
-    scale = img_w / target_width
     card_w_px = int(target_width * dpr)
     card_h_px = int(target_height * dpr)
+
+    # 规范宽度边界，裁剪超出部分
+    if img_w != card_w_px and img_w > card_w_px:
+        full_img = full_img.crop((0, 0, card_w_px, img_h))
+        img_w = card_w_px
+
+    scale_y = img_h / full_height if full_height > 0 else float(dpr)
 
     if full_height <= target_height * 1.15:
         # 单张卡片模式
@@ -462,11 +474,14 @@ def direct_slice_html(input_file_path, output_dir=None, target_width=1080, targe
         print(f"✂️ 智能语义拆分为 {len(cards)} 张 3:4 高清独立卡片（互斥零重复）...")
 
         for i, (y_start, y_end) in enumerate(cards):
-            sy = int(round(y_start * scale))
-            ey = int(round(y_end * scale))
+            sy = max(0, min(img_h, int(round(y_start * scale_y))))
+            ey = max(sy, min(img_h, int(round(y_end * scale_y))))
             crop_h = ey - sy
 
-            cropped = full_img.crop((0, sy, img_w, ey))
+            if crop_h <= 0:
+                continue
+
+            cropped = full_img.crop((0, sy, card_w_px, ey))
 
             # 若内容高度略超单张标准高度，等比微缩至画布高度，保持整洁
             if crop_h > card_h_px:

@@ -20,6 +20,19 @@ CREATOR_URL = "https://creator.douyin.com"
 UPLOAD_URL = f"{CREATOR_URL}/creator-micro/content/upload?default-tab=3"
 
 
+def _get_dist_dir(image_paths: list[str] = None) -> Path:
+    """Find the dist directory corresponding to the given images."""
+    if image_paths:
+        first_p = Path(image_paths[0]).resolve()
+        for candidate in [first_p.parent, first_p.parent.parent]:
+            if candidate.name == "dist":
+                return candidate
+            if (candidate / "dist").is_dir():
+                return candidate / "dist"
+        return first_p.parent
+    return Path.cwd()
+
+
 def _is_logged_in(page) -> bool:
     """Check if current page is logged in by examining URL and DOM."""
     url = page.url
@@ -45,19 +58,15 @@ def _is_logged_in(page) -> bool:
 
 def _wait_for_login(page, timeout_seconds=300, qr_dir=None):
     """Block until the user completes QR-code login."""
-    print("\n" + "=" * 50)
-    print("📱 请使用抖音 App 扫码登录")
-    print(f"   超时时间：{timeout_seconds} 秒")
-    print("   登录成功后将自动继续...")
-    print("=" * 50 + "\n")
+    print("\n" + "=" * 50, flush=True)
+    print("📱 请使用抖音 App 扫码登录", flush=True)
+    print(f"   超时时间：{timeout_seconds} 秒", flush=True)
+    print("   登录成功后将自动继续...", flush=True)
+    print("=" * 50 + "\n", flush=True)
 
     # Take screenshot and crop clean QR code after initial rendering
     time.sleep(3)
-    target_qr_dir = qr_dir
-    if not target_qr_dir or not Path(target_qr_dir).exists():
-        target_qr_dir = Path("/home/guagua/workspace/project/danke-creator/my-articles-md/载具/从入门到入土-载具篇/dist")
-    if not target_qr_dir.exists():
-        target_qr_dir = Path.cwd()
+    target_qr_dir = Path(qr_dir) if qr_dir and Path(qr_dir).exists() else Path.cwd()
 
     qr_path = Path(target_qr_dir) / "抖音扫码登录.png"
     
@@ -189,9 +198,11 @@ def upload_image_post(
     page = context.pages[0] if context.pages else context.new_page()
     page.bring_to_front()
 
+    dist_dir = _get_dist_dir(image_paths)
+
     try:
         # 1. Validate session, prompt for scan if needed
-        print("🔍 验证登录状态...")
+        print("🔍 验证登录状态...", flush=True)
         page.goto(CREATOR_URL, wait_until="domcontentloaded", timeout=20000)
         time.sleep(2)
 
@@ -199,14 +210,13 @@ def upload_image_post(
             if headless:
                 # Close headless browser and restart headed
                 context.close()
-                print("⚠️  Session 已失效，正在唤起有头浏览器进行扫码登录...")
+                print("⚠️  Session 已失效，正在唤起有头浏览器进行扫码登录...", flush=True)
                 return upload_image_post(playwright, image_paths, title, body_text, headless=False, publish_now=publish_now, review=review)
             else:
                 # Prompt user to scan QR in current headed window
-                out_dir = Path(image_paths[0]).parent.parent if image_paths else None
-                _wait_for_login(page, timeout_seconds=300, qr_dir=out_dir)
+                _wait_for_login(page, timeout_seconds=300, qr_dir=dist_dir)
 
-        print("✅ 登录状态有效")
+        print("✅ 登录状态有效", flush=True)
 
         # 2. Click "发布图文" card on creator home page
         print("📤 正在进入图文发布页面...")
@@ -273,25 +283,53 @@ def upload_image_post(
         print(f"🔗 当前发布页 URL: {page.url}")
 
         # 3. Upload images
-        print(f"🖼️  正在上传 {len(image_paths)} 张图片...")
+        print(f"🖼️  正在上传 {len(image_paths)} 张图片...", flush=True)
+
+        print("⏳ 等待上传区域加载就绪...", flush=True)
+        # Wait up to 15 seconds for file input or upload trigger to appear
+        for _ in range(15):
+            time.sleep(1)
+            try:
+                page.evaluate("""() => {
+                    document.querySelectorAll('.shepherd-modal-overlay-container, .shepherd-element, .shepherd-modal-is-visible, [class*="shepherd"]')
+                        .forEach(el => el.remove());
+                }""")
+            except Exception:
+                pass
+            if page.locator('input[type="file"]').count() > 0:
+                break
+            try:
+                if page.locator('text=上传图片').is_visible() or page.locator('text=点击上传').is_visible():
+                    break
+            except Exception:
+                pass
 
         file_inputs = page.locator('input[type="file"]')
         file_input_count = file_inputs.count()
-        print(f"   找到 {file_input_count} 个 file input 元素")
+        print(f"   找到 {file_input_count} 个 file input 元素", flush=True)
 
         if file_input_count > 0:
+            uploaded = False
             for i in range(file_input_count):
                 fi = file_inputs.nth(i)
                 accept = fi.get_attribute("accept") or ""
                 if "image" in accept or "png" in accept or "jpg" in accept or accept == "":
-                    fi.set_input_files(image_paths, timeout=15000)
-                    print("   ✅ 通过 file input 上传成功")
-                    break
+                    try:
+                        fi.set_input_files(image_paths, timeout=15000)
+                        print("   ✅ 通过 file input 上传成功", flush=True)
+                        uploaded = True
+                        break
+                    except Exception as e:
+                        print(f"   ⚠️ file input 设置失败: {e}", flush=True)
+            if not uploaded:
+                file_inputs.first.set_input_files(image_paths, timeout=15000)
+                print("   ✅ 通过 first file input 强制上传成功", flush=True)
         else:
             upload_triggers = [
                 'text=上传图片',
                 'text=点击上传',
                 'text=添加图片',
+                '[class*="upload-btn"]',
                 '[class*="upload"]',
                 '[class*="Upload"]',
                 '[class*="add"]',
@@ -301,26 +339,26 @@ def upload_image_post(
             for selector in upload_triggers:
                 try:
                     trigger = page.locator(selector).first
-                    if trigger.is_visible(timeout=2000):
-                        with page.expect_file_chooser(timeout=5000) as fc_info:
+                    if trigger.is_visible(timeout=3000):
+                        with page.expect_file_chooser(timeout=8000) as fc_info:
                             trigger.click()
                         file_chooser = fc_info.value
                         file_chooser.set_files(image_paths)
                         clicked = True
-                        print(f"   ✅ 通过 file_chooser 上传成功 (selector: {selector})")
+                        print(f"   ✅ 通过 file_chooser 上传成功 (selector: {selector})", flush=True)
                         break
                 except Exception:
                     continue
 
             if not clicked:
-                debug_path = str(Path(image_paths[0]).parent / "_douyin_upload_debug.png")
+                debug_path = str(dist_dir / "_douyin_upload_debug.png")
                 page.screenshot(path=debug_path)
                 raise RuntimeError(
                     f"❌ 无法找到图片上传入口。截图: {debug_path}\n"
                     f"当前 URL: {page.url}"
                 )
 
-        print("⏳ 等待图片上传与处理...")
+        print("⏳ 等待图片上传与处理...", flush=True)
         time.sleep(8)
 
         # Wait for loading spinners to clear
@@ -333,9 +371,9 @@ def upload_image_post(
             except Exception:
                 break
 
-        debug_path_uploaded = str(Path(image_paths[0]).parent / "_douyin_step2_uploaded.png")
+        debug_path_uploaded = str(dist_dir / "_douyin_step2_uploaded.png")
         page.screenshot(path=debug_path_uploaded)
-        print(f"✅ 图片上传完成，截图已保存: {debug_path_uploaded}")
+        print(f"✅ 图片上传完成，截图已保存: {debug_path_uploaded}", flush=True)
 
         # 4. Fill in title
         print(f"📝 填写标题: {title[:20]}")
@@ -393,7 +431,7 @@ def upload_image_post(
 
         time.sleep(1)
 
-        debug_path_filled = str(Path(image_paths[0]).parent / "_douyin_step3_filled.png")
+        debug_path_filled = str(dist_dir / "_douyin_step3_filled.png")
         page.screenshot(path=debug_path_filled)
 
         # 6. Action: Review, Publish or Save Draft
@@ -485,28 +523,29 @@ def upload_image_post(
 
             if not draft_saved:
                 # Take debugging screenshots after scrolling
-                debug_path_draft = str(Path(image_paths[0]).parent / "_douyin_draft_debug.png")
+                debug_path_draft = str(dist_dir / "_douyin_draft_debug.png")
                 page.screenshot(path=debug_path_draft)
                 raise RuntimeError(
                     f"❌ 未找到'保存草稿'按钮。截图: {debug_path_draft}\n"
                     "请检查抖音创作者后台页面结构是否有变化。"
                 )
 
-            print("\n" + "=" * 50)
-            print("🚀 抖音图文草稿保存成功！(DOUYIN DRAFT SAVED SUCCESSFULLY)")
-            print("=" * 50)
-            print("您现在可以前往抖音创作者后台'草稿箱'查看。")
+            print("\n" + "=" * 50, flush=True)
+            print("🎯 === DOUYIN_DRAFT_SUCCESS ===", flush=True)
+            print("🚀 抖音图文草稿保存成功！(DOUYIN DRAFT SAVED SUCCESSFULLY)", flush=True)
+            print("=" * 50, flush=True)
+            print("您现在可以前往抖音创作者后台'草稿箱'查看。", flush=True)
 
         time.sleep(2)
 
         # 7. Final verification
-        debug_path_done = str(Path(image_paths[0]).parent / "_douyin_step4_done.png")
-        page.screenshot(path=debug_path_done)
-        print(f"📸 最终截图: {debug_path_done}")
+        draft_result_path = str(dist_dir / "douyin_draft_result.png")
+        page.screenshot(path=draft_result_path)
+        print(f"📸 最终草稿截图已保存至: {draft_result_path}", flush=True)
 
         if not headless:
-            print("\n🌟 浏览器窗口已在桌面打开并保持开启，方便您查看与确认！")
-            print("   （如需关闭，可直接手动关闭浏览器窗口）")
+            print("\n🌟 浏览器窗口已在桌面打开并保持开启，方便您查看与确认！", flush=True)
+            print("   （如需关闭，可直接手动关闭浏览器窗口）", flush=True)
             try:
                 page.wait_for_event("close", timeout=0)
             except Exception:
@@ -516,9 +555,9 @@ def upload_image_post(
 
     except Exception as e:
         try:
-            screenshot_path = str(Path(image_paths[0]).parent / "_douyin_error.png")
+            screenshot_path = str(dist_dir / "_douyin_error.png")
             page.screenshot(path=screenshot_path)
-            print(f"📸 错误截图已保存: {screenshot_path}")
+            print(f"📸 错误截图已保存: {screenshot_path}", flush=True)
         except Exception:
             pass
         raise
