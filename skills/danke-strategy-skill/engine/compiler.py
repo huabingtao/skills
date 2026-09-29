@@ -1017,7 +1017,7 @@ def replace_recommendations_placeholder(soup, project_config, input_dir, metadat
             soup.append(rec_div)
 
 
-def build_qrcode_section(soup, project_config, input_dir, metadata):
+def build_qrcode_section(soup, project_config, input_dir, metadata, output_dir=None):
     """
     Builds a beautiful centered QR code section tag.
     """
@@ -1032,7 +1032,7 @@ def build_qrcode_section(soup, project_config, input_dir, metadata):
     if qrcode_image:
         if qrcode_image.startswith('img://'):
             from .compiler import ImageResolver
-            resolver = ImageResolver(project_config, input_dir=input_dir)
+            resolver = ImageResolver(project_config, input_dir=input_dir, output_dir=output_dir)
             qr_src = resolver.resolve_image_src(qrcode_image)
         else:
             qr_src = qrcode_image
@@ -1144,7 +1144,7 @@ def build_qrcode_section(soup, project_config, input_dir, metadata):
     return qr_div
 
 
-def replace_qrcode_placeholder(soup, project_config, input_dir, metadata):
+def replace_qrcode_placeholder(soup, project_config, input_dir, metadata, output_dir=None):
     """
     Finds placeholder {{扫码获取更多精彩}} and replaces it in-place with the QR code section.
     If no placeholder is in body text, auto-inserts before disclaimer.
@@ -1157,7 +1157,7 @@ def replace_qrcode_placeholder(soup, project_config, input_dir, metadata):
             placeholder_text = "{{扫码获取更多精彩}}"
             break
 
-    qr_div = build_qrcode_section(soup, project_config, input_dir, metadata)
+    qr_div = build_qrcode_section(soup, project_config, input_dir, metadata, output_dir=output_dir)
 
     if target_node:
         if not qr_div:
@@ -1344,7 +1344,7 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None, output_di
     replace_recommendations_placeholder(soup, project_config, input_dir, metadata)
 
     # Replace QR code placeholder in-place with the section if present
-    replace_qrcode_placeholder(soup, project_config, input_dir, metadata)
+    replace_qrcode_placeholder(soup, project_config, input_dir, metadata, output_dir=output_dir)
 
     final_html = str(soup)
 
