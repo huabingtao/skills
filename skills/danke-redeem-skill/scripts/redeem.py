@@ -5,17 +5,12 @@ import os
 import sys
 import time
 import argparse
-import traceback
+import csv
+import math
+import re
+import tempfile
+from pathlib import Path
 import requests
-import pandas as pd
-
-# Suppress ddddocr advertising/logging if possible
-# We import ddddocr inside main or helper to handle import errors gracefully
-try:
-    import ddddocr
-except ImportError:
-    print("Error: ddddocr library is not installed. Please run pip install ddddocr.")
-    sys.exit(1)
 
 BASE_URL = "https://mail-survivorio.lezuan.net"
 
@@ -51,81 +46,119 @@ def parse_args():
     parser.add_argument("--code", "-c", required=True, help="兑换码 (例如 '中秋节快乐')")
     parser.add_argument("--delay", "-d", type=float, default=0.5, help="每次请求之间的延迟时间(秒)，默认 0.5")
     parser.add_argument("--output", "-o", default="redeem_report.xlsx", help="结果报告输出路径，默认 redeem_report.xlsx")
-    return parser.parse_args()
+    parser.add_argument("--force", action="store_true", help="明确允许覆盖已有报告")
+    parser.add_argument("--dry-run", action="store_true", help="仅校验输入并生成待兑换报告，不联网、不加载 OCR")
+    args = parser.parse_args()
+    if not math.isfinite(args.delay) or args.delay < 0:
+        parser.error("--delay 必须是非负有限数字")
+    if not args.code.strip():
+        parser.error("--code 不能为空")
+    if Path(args.output).suffix.lower() not in (".csv", ".xlsx"):
+        parser.error("--output 仅支持 .csv 或 .xlsx")
+    if Path(args.file).resolve() == Path(args.output).resolve():
+        parser.error("输入文件与报告不能使用同一路径")
+    if Path(args.output).exists() and not args.force:
+        parser.error("报告已存在；请选择新路径，或用 --force 明确覆盖")
+    return args
+
+def normalize_player_id(value, *, spreadsheet=False):
+    """只接受十进制 ID；表格文本保留前导零，整数小数尾缀可安全移除。"""
+    text = str(value).strip()
+    if not text:
+        return None
+    if spreadsheet and re.fullmatch(r"[0-9]+\.0+", text):
+        text = text.split(".", 1)[0]
+    if not re.fullmatch(r"[0-9]+", text):
+        raise ValueError("玩家 ID 必须为纯数字；请检查输入行（不接受小数或科学计数法）")
+    return text
+
 
 def load_player_ids(file_path):
-    """
-    支持读取 .txt, .csv, .xlsx 文件中的玩家ID
-    """
-    if not os.path.exists(file_path):
-        raise FileNotFoundError(f"文件不存在: {file_path}")
-    
-    ext = os.path.splitext(file_path)[1].lower()
+    path = Path(file_path)
     ids = []
-    
-    if ext == '.txt':
-        with open(file_path, 'r', encoding='utf-8') as f:
-            for line in f:
-                line = line.strip()
-                # 过滤空行和注释行
-                if line and not line.startswith('#'):
-                    # 支持 "12345678" 或 "名字-12345678" 格式（自动提取ID）
-                    if '-' in line:
-                        parts = line.split('-')
-                        # 假设最后一项是ID
-                        potential_id = parts[-1].strip()
-                        if potential_id.isdigit():
-                            ids.append(potential_id)
-                        else:
-                            ids.append(line)
-                    else:
-                        ids.append(line)
-    elif ext == '.csv':
-        df = pd.read_csv(file_path)
-        ids = extract_ids_from_dataframe(df)
-    elif ext in ['.xlsx', '.xls']:
-        df = pd.read_excel(file_path)
-        ids = extract_ids_from_dataframe(df)
+    if path.suffix.lower() == ".txt":
+        for number, line in enumerate(path.read_text(encoding="utf-8-sig").splitlines(), 1):
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "-" in line and not line.startswith("-"):
+                line = line.rsplit("-", 1)[-1].strip()
+            try:
+                ids.append(normalize_player_id(line))
+            except ValueError as exc:
+                raise ValueError(f"第 {number} 行: {exc}") from exc
+    elif path.suffix.lower() == ".csv":
+        with path.open(encoding="utf-8-sig", newline="") as handle:
+            reader = csv.DictReader(handle)
+            column = select_id_column(reader.fieldnames or [])
+            for number, row in enumerate(reader, 2):
+                value = row.get(column)
+                if value is None or not value.strip():
+                    continue
+                try:
+                    ids.append(normalize_player_id(value, spreadsheet=True))
+                except ValueError as exc:
+                    raise ValueError(f"第 {number} 行: {exc}") from exc
+    elif path.suffix.lower() in (".xlsx", ".xls"):
+        import pandas as pd
+        frame = pd.read_excel(path, dtype=str, keep_default_na=False)
+        ids = extract_ids_from_dataframe(frame)
     else:
         raise ValueError("不支持的文件格式，仅支持 .txt, .csv, .xlsx, .xls")
-    
-    # 去重并保持顺序
-    seen = set()
-    unique_ids = []
-    for pid in ids:
-        clean_id = str(pid).strip()
-        if clean_id and clean_id not in seen:
-            seen.add(clean_id)
-            unique_ids.append(clean_id)
-            
-    return unique_ids
+    return list(dict.fromkeys(pid for pid in ids if pid))
+
+
+def select_id_column(columns):
+    columns = list(columns)
+    if not columns:
+        raise ValueError("输入表格没有列")
+    for col in columns:
+        if str(col).strip().lower() in ("id", "玩家id", "userid", "用户id", "游戏id"):
+            return col
+    print("未找到显式 ID 列，使用第一列；请先用 --dry-run 核对。")
+    return columns[0]
+
 
 def extract_ids_from_dataframe(df):
-    """
-    尝试从 DataFrame 中寻找包含 ID 的列并提取
-    """
-    # 候选列名
-    candidate_cols = ['ID', 'id', '玩家ID', '玩家id', 'userId', 'userid', '用户ID', '用户id', '游戏ID', '游戏id']
-    target_col = None
-    
-    for col in df.columns:
-        if str(col).strip() in candidate_cols:
-            target_col = col
-            break
-            
-    if target_col is None:
-        # 如果没找到候选列名，默认使用第一列
-        target_col = df.columns[0]
-        print(f"未找到显式的ID列，将默认使用第一列 '{target_col}' 作为玩家ID")
-        
-    # 提取并转换为字符串，过滤掉空值
-    return df[target_col].dropna().astype(str).tolist()
+    column = select_id_column(df.columns)
+    return [normalize_player_id(value, spreadsheet=True) for value in df[column].dropna()]
+
+
+REPORT_FIELDS = ["玩家ID", "兑换状态", "结果说明", "验证码尝试次数"]
+
+
+def save_report(results, output):
+    """先写同目录临时文件再替换，避免中断破坏已有进度。"""
+    path = Path(output)
+    if path.suffix.lower() not in (".csv", ".xlsx"):
+        raise ValueError("报告仅支持 .csv 或 .xlsx")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, pending = tempfile.mkstemp(suffix=path.suffix, dir=path.parent)
+    os.close(fd)
+    try:
+        if path.suffix.lower() == ".csv":
+            with open(pending, "w", encoding="utf-8-sig", newline="") as handle:
+                writer = csv.DictWriter(handle, fieldnames=REPORT_FIELDS)
+                writer.writeheader()
+                writer.writerows(results)
+        else:
+            import pandas as pd
+            pd.DataFrame(results, columns=REPORT_FIELDS).to_excel(pending, index=False, engine="openpyxl")
+        os.replace(pending, path)
+    finally:
+        if os.path.exists(pending):
+            os.unlink(pending)
+
 
 class DankRedeemer:
     def __init__(self, gift_code, delay=0.5):
         self.gift_code = gift_code
         self.delay = delay
         # 初始化 ddddocr 识别引擎
+        try:
+            import ddddocr
+        except ImportError as exc:
+            raise RuntimeError("缺少 ddddocr；请安装此技能 requirements.txt 中的依赖") from exc
         self.ocr = ddddocr.DdddOcr(show_ad=False)
         self.session = requests.Session()
         self.session.headers.update(HEADERS)
@@ -180,11 +213,16 @@ class DankRedeemer:
                 # 如果识别出来不是4位，直接重试，不浪费接口调用
                 if len(captcha_code) != 4 or not captcha_code.isdigit():
                     retries += 1
-                    time.sleep(0.2)
+                    time.sleep(max(self.delay, 0.2))
                     continue
                 
                 # 调用兑换接口
-                res_data = self.claim_gift(user_id, captcha_code, captcha_id)
+                try:
+                    res_data = self.claim_gift(user_id, captcha_code, captcha_id)
+                except (requests.RequestException, ValueError) as exc:
+                    return "待核实", f"兑换响应未确认，请核对领取状态后再重试: {exc}", retries + 1
+                if not isinstance(res_data, dict) or "code" not in res_data:
+                    return "待核实", "兑换响应格式异常，请核对领取状态", retries + 1
                 code = res_data.get("code")
                 msg = CODE_MAP.get(code, f"未知错误 (code: {code})")
                 
@@ -194,7 +232,7 @@ class DankRedeemer:
                 elif code == 20002:
                     # 验证码错误，重试
                     retries += 1
-                    time.sleep(0.2)
+                    time.sleep(max(self.delay, 0.2))
                     continue
                 elif code in [20402, 20407]:
                     # 已领取
@@ -211,7 +249,7 @@ class DankRedeemer:
                     
             except Exception as e:
                 retries += 1
-                time.sleep(0.5)
+                time.sleep(max(self.delay, 0.5))
                 if retries >= max_retries:
                     return "失败", f"接口调用异常: {str(e)}", retries
         
@@ -241,70 +279,44 @@ def main():
         print(" 错误: 未找到任何有效的玩家ID。")
         sys.exit(1)
         
+    results = [{"玩家ID": pid, "兑换状态": "待兑换", "结果说明": "尚未请求接口", "验证码尝试次数": 0}
+               for pid in player_ids]
+    # 先验证报告路径和写入依赖，避免实际兑换后才发现报告无法保存。
+    save_report(results, args.output)
+    if args.dry_run:
+        print(f"输入校验完成，未执行兑换；{total_ids} 个 ID，报告: {Path(args.output).resolve()}")
+        return
+
     print("\n[开始执行兑换]...")
     redeemer = DankRedeemer(gift_code=args.code, delay=args.delay)
-    
-    results = []
-    success_count = 0
-    already_claimed_count = 0
-    fail_count = 0
-    
-    start_time = time.time()
-    
-    for idx, pid in enumerate(player_ids, 1):
-        print(f"[{idx}/{total_ids}] 正在处理玩家 ID: {pid} ... ", end="", flush=True)
-        
-        status, message, retries = redeemer.redeem_single(pid)
-        
-        if status == "成功":
-            success_count += 1
-            print(f"\033[92m成功\033[0m (尝试了 {retries} 次)")
-        elif status == "已领取":
-            already_claimed_count += 1
-            print(f"\033[93m已领取\033[0m ({message})")
-        else:
-            fail_count += 1
-            print(f"\033[91m失败\033[0m ({message})")
-            
-        results.append({
-            "玩家ID": pid,
-            "兑换状态": status,
-            "结果说明": message,
-            "验证码尝试次数": retries
-        })
-        
-        # 频率控制
-        if idx < total_ids:
-            time.sleep(args.delay)
-            
-    end_time = time.time()
-    elapsed_time = end_time - start_time
-    
-    # 保存报告
-    df_results = pd.DataFrame(results)
-    output_ext = os.path.splitext(args.output)[1].lower()
+    start_time = time.monotonic()
     try:
-        if output_ext in ['.xlsx', '.xls']:
-            df_results.to_excel(args.output, index=False)
-        else:
-            # 默认保存为 CSV
-            if output_ext != '.csv':
-                args.output = os.path.splitext(args.output)[0] + ".csv"
-            df_results.to_csv(args.output, index=False, encoding='utf-8-sig')
-        print(f"\n[报告生成] 详细兑换报告已保存至: {os.path.abspath(args.output)}")
-    except Exception as e:
-        print(f"\n[警告] 保存报告失败: {e}")
-        
-    # 统计汇总输出
-    print("\n" + "=" * 50)
-    print("                  兑换统计汇总")
-    print("=" * 50)
-    print(f" 总 ID 数量 : {total_ids}")
-    print(f" 兑换成功   : {success_count} ({success_count/total_ids*100:.1f}%)")
-    print(f" 重复领取   : {already_claimed_count} ({already_claimed_count/total_ids*100:.1f}%)")
-    print(f" 兑换失败   : {fail_count} ({fail_count/total_ids*100:.1f}%)")
-    print(f" 总耗时     : {elapsed_time:.1f} 秒 (平均 {elapsed_time/total_ids:.2f} 秒/个)")
-    print("=" * 50)
+        for idx, pid in enumerate(player_ids):
+            # 如在请求中途退出，该条保留“待核实”，避免被误当成未发送。
+            results[idx].update(兑换状态="待核实", 结果说明="请求开始，尚未取得完整响应")
+            save_report(results, args.output)
+            status, message, attempts = redeemer.redeem_single(pid)
+            results[idx].update(兑换状态=status, 结果说明=message, 验证码尝试次数=attempts)
+            save_report(results, args.output)
+            print(f"[{idx + 1}/{total_ids}] {status}: {message}")
+            if idx + 1 < total_ids:
+                time.sleep(args.delay)
+    finally:
+        redeemer.session.close()
+
+    counts = {status: sum(row["兑换状态"] == status for row in results) for status in ("成功", "已领取", "失败", "待核实")}
+    print(f"兑换完成: {counts}；总耗时 {time.monotonic() - start_time:.1f} 秒")
+    print(f"报告: {Path(args.output).resolve()}")
+    if counts["失败"] or counts["待核实"]:
+        raise SystemExit(1)
+
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("任务已中断；报告保留已完成结果、待核实请求和待兑换 ID。", file=sys.stderr)
+        sys.exit(130)
+    except Exception as exc:
+        print(f"错误: {exc}", file=sys.stderr)
+        sys.exit(1)

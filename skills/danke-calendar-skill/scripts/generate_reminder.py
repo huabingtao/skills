@@ -9,6 +9,8 @@ generate_reminder.py - 每日玩法待办与倒计时日历文章自动生成工
 import argparse
 import datetime
 import json
+import math
+from zoneinfo import ZoneInfo
 import os
 import re
 import subprocess
@@ -19,6 +21,11 @@ from pathlib import Path
 
 def find_workspace_root() -> Path:
     """自动向上查找工作区根目录"""
+    if env_root := os.environ.get("WORKSPACE_ROOT"):
+        root = Path(env_root).expanduser().resolve()
+        if not root.is_dir():
+            raise ValueError("WORKSPACE_ROOT 不是有效目录")
+        return root
     current = Path(__file__).resolve()
     for parent in current.parents:
         if (parent / "content" / "danke-creator").is_dir() or (parent / "project" / "danke-creator").is_dir():
@@ -26,10 +33,7 @@ def find_workspace_root() -> Path:
     cwd = Path.cwd()
     if (cwd / "content" / "danke-creator").is_dir() or (cwd / "project" / "danke-creator").is_dir():
         return cwd
-    if env_root := os.environ.get("WORKSPACE_ROOT"):
-        if Path(env_root).is_dir():
-            return Path(env_root)
-    return cwd
+    raise FileNotFoundError("找不到工作区；请设置 WORKSPACE_ROOT 或指定 --output-dir")
 
 
 
@@ -65,13 +69,26 @@ def fetch_daily_digest(target_date: str, api_base: str = "http://localhost:3000"
 
 
 def validate_digest(data: dict, target_date: str) -> dict:
+    if not isinstance(target_date, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", target_date):
+        raise ValueError("规则日期必须为 YYYY-MM-DD")
+    datetime.date.fromisoformat(target_date)
     if not isinstance(data, dict) or data.get("date") != target_date:
         raise ValueError("规则结果日期必须与 --date 一致")
     if not isinstance(data.get("items"), list):
         raise ValueError("规则结果必须包含 items 数组")
     for item in data["items"]:
-        if not isinstance(item, dict) or not isinstance(item.get("name"), str) or not isinstance(item.get("statusText"), str):
-            raise ValueError("规则项目必须包含名称和状态文案")
+        if not isinstance(item, dict):
+            raise ValueError("规则项目必须为对象")
+        for field in ("name", "statusText"):
+            if not isinstance(item.get(field), str) or not item[field].strip():
+                raise ValueError(f"规则项目的 {field} 必须为非空文本")
+        if item.get("digestNote") is not None and not isinstance(item["digestNote"], str):
+            raise ValueError("digestNote 必须为文本或 null")
+        days = item.get("daysRemaining")
+        if days is not None and (isinstance(days, bool) or not isinstance(days, (int, float)) or not math.isfinite(days)):
+            raise ValueError("daysRemaining 必须为有限数字或 null")
+        if item.get("isRedeemDay") is not None and not isinstance(item["isRedeemDay"], bool):
+            raise ValueError("isRedeemDay 必须为布尔值或 null")
     return data
 
 
@@ -96,7 +113,7 @@ def highlight_urgent_status(status_text: str, days_remaining: int, is_redeem_day
     if is_redeem_day:
         return f'<font color="#dc2626">{status_text}</font>'
     
-    if days_remaining <= 3:
+    if days_remaining is not None and 0 <= days_remaining <= 3:
         # Match "还剩 X 天" or "剩 X 天" and insert clean spacing
         highlighted = re.sub(
             r'(还剩\s*\d+\s*天|剩\s*\d+\s*天)',
@@ -112,7 +129,7 @@ def highlight_urgent_status(status_text: str, days_remaining: int, is_redeem_day
 def get_time_greeting(dt: datetime.datetime = None) -> str:
     """根据生成时刻动态返回问候语：早上好 / 中午好 / 下午好 / 晚上好"""
     if dt is None:
-        dt = datetime.datetime.now()
+        dt = datetime.datetime.now(ZoneInfo("Asia/Shanghai"))
     hour = dt.hour
     if 5 <= hour < 12:
         return "早上好"
@@ -127,20 +144,21 @@ def get_time_greeting(dt: datetime.datetime = None) -> str:
 def build_reminder_article(data: dict) -> str:
     """严格基于后台数据组装极简日历清单 Markdown 文章，往期推荐使用 Frontmatter recommendations 元数据"""
     import random
-    date_str = data.get("date", datetime.date.today().strftime("%Y-%m-%d"))
+    date_str = data.get("date")
+    validate_digest(data, date_str)
     dt = datetime.datetime.strptime(date_str, "%Y-%m-%d").date()
     yy = dt.year % 100
     month = dt.month
     day = dt.day
 
-    items = data.get("items") or data.get("reminders") or []
+    items = data["items"]
     # 按照结束时间/剩余天数从小到大排序
-    items = sorted(items, key=lambda x: (x.get("daysRemaining", 9999), x.get("name", "")))
+    items = sorted(items, key=lambda x: (x["daysRemaining"] if x.get("daysRemaining") is not None else float("inf"), x.get("name", "")))
     count = len(items)
 
     # 随机挑选 3 篇推荐文章（使用目标日期作为随机种子以保证同一天生成的幂等性）
-    random.seed(int(dt.strftime("%Y%m%d")))
-    selected_articles = random.sample(RECOMMENDED_ARTICLES_POOL, min(3, len(RECOMMENDED_ARTICLES_POOL)))
+    rng = random.Random(int(dt.strftime("%Y%m%d")))
+    selected_articles = rng.sample(RECOMMENDED_ARTICLES_POOL, min(3, len(RECOMMENDED_ARTICLES_POOL)))
 
     greeting = get_time_greeting()
 
@@ -176,14 +194,14 @@ def build_reminder_article(data: dict) -> str:
     lines.append("")
 
     for item in items:
-        name = item.get("name", "")
+        name = re.sub(r"\s+", " ", item["name"]).strip()
         raw_status_text = item.get("statusText", "")
         days_remaining = item.get("daysRemaining", 9999)
         is_redeem_day = item.get("isRedeemDay", False)
         
         status_text = clean_status_text(raw_status_text, name)
         status_text = highlight_urgent_status(status_text, days_remaining, is_redeem_day)
-        note = item.get("digestNote")
+        note = re.sub(r"\s+", " ", item.get("digestNote") or "").strip()
         
         # 单行展示：自然无序列表 + 玩法名称 + 状态文案（备注）
         if note and note.strip():
@@ -204,73 +222,34 @@ def build_reminder_article(data: dict) -> str:
 
 def auto_tag_file(file_path: Path):
     """自动调用 auto_tag.py 进行专有名词宏标签标注"""
-    ws = find_workspace_root()
-    candidates = [
-        ws / "skills" / "danke-strategy-skill" / "scripts" / "auto_tag.py",
-        ws / "skill" / "danke-strategy-skill" / "scripts" / "auto_tag.py",
-        Path.home() / "skills" / "skills" / "danke-strategy-skill" / "scripts" / "auto_tag.py",
-    ]
-    auto_tag_script = next((c for c in candidates if c.exists()), None)
-    if auto_tag_script:
-        try:
-            subprocess.run([sys.executable, str(auto_tag_script), str(file_path)], check=True)
-            print("✔ 专有名词宏自动标注完成")
-        except Exception as e:
-            print(f"⚠️ 自动宏标注跳过: {e}")
+    script = Path(__file__).resolve().parents[2] / "danke-strategy-skill/scripts/auto_tag.py"
+    if not script.is_file():
+        raise FileNotFoundError(f"缺少宏标注脚本: {script}")
+    subprocess.run([sys.executable, str(script), str(file_path)], check=True)
+    print("✔ 专有名词宏自动标注完成")
 
 
 def generate_covers(out_dir: Path, target_date_obj: datetime.date = None):
     """使用全特工专属底图与带当天日期的文案生成封面（横屏与竖屏双模）"""
     out_dir.mkdir(parents=True, exist_ok=True)
-    ws = find_workspace_root()
-    make_cover_script = None
-    for cand in [
-        ws / "skills" / "wechat-cover-generator" / "scripts" / "make_cover.py",
-        ws / ".agents" / "skills" / "wechat-cover-generator" / "scripts" / "make_cover.py",
-        Path.home() / "skills" / "skills" / "wechat-cover-generator" / "scripts" / "make_cover.py",
-    ]:
-        if cand.exists():
-            make_cover_script = cand
-            break
-
-    bg_img = Path(__file__).resolve().parent.parent / "assets" / "reminder_cover_bg.jpg"
-    if not bg_img.exists():
-        for cand_bg in [
-            ws / "skills" / "danke-calendar-skill" / "assets" / "reminder_cover_bg.jpg",
-            ws / ".agents" / "skills" / "danke-calendar-skill" / "assets" / "reminder_cover_bg.jpg",
-            Path.home() / "skills" / "skills" / "danke-calendar-skill" / "assets" / "reminder_cover_bg.jpg",
-        ]:
-            if cand_bg.exists():
-                bg_img = cand_bg
-                break
+    skills_dir = Path(__file__).resolve().parents[2]
+    make_cover_script = skills_dir / "wechat-cover-generator/scripts/make_cover.py"
+    bg_img = Path(__file__).resolve().parent.parent / "assets/reminder_cover_bg.jpg"
 
     if target_date_obj is None:
-        target_date_obj = datetime.date.today()
+        target_date_obj = datetime.datetime.now(ZoneInfo("Asia/Shanghai")).date()
 
     cover_text = f"弹壳特攻队\n提醒日历{target_date_obj.year}.{target_date_obj.month}.{target_date_obj.day}"
 
     if make_cover_script and make_cover_script.exists() and bg_img.exists():
         try:
-            # 1. 横屏封面 900x384
-            cmd_h = [
-                sys.executable,
-                str(make_cover_script),
-                "-i", str(bg_img),
-                "-t", cover_text,
-                "-o", str(out_dir / "cover.png"),
-                "--style", "horizontal",
-            ]
-            subprocess.run(cmd_h, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            # 2. 竖屏封面 640x853
-            cmd_v = [
-                sys.executable,
-                str(make_cover_script),
-                "-i", str(bg_img),
-                "-t", cover_text,
-                "-o", str(out_dir / "cover_vertical.png"),
-                "--style", "vertical",
-            ]
-            subprocess.run(cmd_v, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            cmd = [sys.executable, str(make_cover_script), "-i", str(bg_img),
+                   "-t", cover_text, "-o", str(out_dir / "cover.png"), "--both"]
+            subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            for name in ("cover.png", "cover_vertical.png"):
+                output = out_dir / name
+                if not output.is_file() or output.stat().st_size == 0:
+                    raise RuntimeError(f"封面脚本未生成有效文件: {output}")
             print(f"🖼️ 专属双模封面已自动生成: {out_dir / 'cover.png'}, {out_dir / 'cover_vertical.png'} (文字: {cover_text})")
         except Exception as e:
             raise RuntimeError("封面生成失败") from e
@@ -280,12 +259,16 @@ def generate_covers(out_dir: Path, target_date_obj: datetime.date = None):
 
 def main():
     parser = argparse.ArgumentParser(description="自动生成《弹壳特攻队》每日玩法待办与倒计时日历文章")
-    parser.add_argument("--date", help="指定生成日期 (YYYY-MM-DD)，默认为当天", default=datetime.date.today().strftime("%Y-%m-%d"))
-    parser.add_argument("--api-base", help="danke-core API 地址", default=os.environ.get("DANKE_API_BASE_URL", "http://localhost:3000"))
+    parser.add_argument("--date", help="指定生成日期 (YYYY-MM-DD)，默认为当天", default=datetime.datetime.now(ZoneInfo("Asia/Shanghai")).date().strftime("%Y-%m-%d"))
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--api-base", help="明确选择直接查询 danke-core，例如 http://localhost:3000")
     parser.add_argument("--output-dir", help="自定义输出目录")
 
-    parser.add_argument("--digest-file", type=Path, help="MCP get_reminder_rules 返回的 JSON 文件")
+    source.add_argument("--digest-file", type=Path, help="MCP get_reminder_rules 返回的 JSON 文件")
 
+    parser.add_argument("--force", action="store_true", help="允许覆盖已有同日日历")
+    parser.add_argument("--skip-covers", action="store_true", help="仅生成文本，不生成封面")
+    parser.add_argument("--no-auto-tag", action="store_true", help="保留原始文本，不添加图标宏")
     args = parser.parse_args()
     target_date_str = args.date
     target_date_obj = datetime.datetime.strptime(target_date_str, "%Y-%m-%d").date()
@@ -296,36 +279,49 @@ def main():
     else:
         digest_data = fetch_daily_digest(target_date_str, api_base=args.api_base)
 
-    items = digest_data.get("items") or digest_data.get("reminders") or []
+    items = digest_data["items"]
     total_rules = len(items)
     print(f"✅ 成功获取 {total_rules} 项生效规则（100% 严格使用后台配置文案）")
 
     article_content = build_reminder_article(digest_data)
 
     # 确定短格式输出目录：project/danke-creator/my-articles-md/提醒/YY.M.D/YY.M.D.md
-    ws = find_workspace_root()
     short_date = to_short_date_str(target_date_obj)
 
     if args.output_dir:
         out_dir = Path(args.output_dir)
     else:
+        ws = find_workspace_root()
         creator_root = ws / "content" / "danke-creator" if (ws / "content" / "danke-creator").is_dir() else ws / "project" / "danke-creator"
         out_dir = creator_root / "my-articles-md" / "提醒" / short_date
 
     out_dir.mkdir(parents=True, exist_ok=True)
     out_file = out_dir / f"{short_date}.md"
 
-    out_file.write_text(article_content, encoding="utf-8")
+    if out_file.exists() and not args.force:
+        raise FileExistsError(f"日历已存在: {out_file}；需要覆盖时传入 --force")
+
+    # 临时稿通过全部请求步骤后再替换源文，失败时保留原稿。
+    import tempfile
+    (out_dir / "dist").mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=out_dir / "dist") as tmp:
+        pending = Path(tmp) / out_file.name
+        pending.write_text(article_content, encoding="utf-8")
+        if not args.no_auto_tag:
+            auto_tag_file(pending)
+        if not args.skip_covers:
+            generate_covers(out_dir / "dist", target_date_obj)
+        pending.replace(out_file)
     print(f"💾 文章已写入: {out_file}")
-
-    # 自动生成专属封面
-    generate_covers(out_dir / "dist", target_date_obj)
-
-    # 自动宏标注
-    auto_tag_file(out_file)
+    if args.skip_covers:
+        print("封面生成已跳过；元数据中的封面路径为约定路径，发布前需补齐。")
 
     print(f"🎉 【{short_date} ({target_date_str}) 弹壳日历事项清单生成完毕】！")
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (ValueError, OSError, RuntimeError, subprocess.CalledProcessError) as exc:
+        print(f"错误: {exc}", file=sys.stderr)
+        sys.exit(1)

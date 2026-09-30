@@ -50,3 +50,8 @@ blob-report/
 *.log
 .cache/
 .pytest_cache/
+
+# Local redemption results (never commit real player data)
+redeem_report*.xlsx
+redeem_report*.csv
+redeem_preview*.csv

@@ -10,8 +10,9 @@
 | :--- | :--- | :--- | :--- |
 | [`article-to-img-skill`](skills/article-to-img-skill) | 微信文章/HTML智能切图为 3:4 (1080x1440) 高清图文 | `切图`、`文章转图文`、`微信文章转小红书` | Node.js / Python |
 | [`bilibili-publisher-skill`](skills/bilibili-publisher-skill) | 自动上传 3:4 切图集至 B站 (哔哩哔哩) 创作者中心草稿箱 | `发布到B站`、`B站草稿`、`bilibili publish` | Python, Playwright |
-| [`danke-calendar-skill`](skills/danke-calendar-skill) | 《弹壳特攻队》11大玩法周期倒计时日历与待办生成 | `弹壳日历`、`今日日历`、`生成日历` | Python |
+| [`danke-calendar-skill`](skills/danke-calendar-skill) | 《弹壳特攻队》后台规则驱动的每日倒计时与待办生成 | `弹壳日历`、`今日日历`、`生成日历` | Python |
 | [`danke-content-creator-skill`](skills/danke-content-creator-skill) | 弹壳特攻队原始素材分析与标准 Markdown 攻略初稿撰写 | `写攻略`、`生成攻略`、`撰写文章` | Agent Native |
+| [`danke-strategy-sync`](skills/danke-strategy-sync) | 检查/创建原创 danke 技能共享链接，保护已有目录 | `同步技能包`、`更新技能链接` | Python |
 | [`danke-strategy-skill`](skills/danke-strategy-skill) | 弹壳攻略一键美化排版与微信公众号草稿自动化发布 | `美化文章`、`排版攻略`、`发布微信` | Node.js, Python |
 | [`douyin-publisher-skill`](skills/douyin-publisher-skill) | 自动上传 3:4 图文切图集至抖音创作者后台草稿箱 | `发布到抖音`、`抖音草稿`、`douyin publish` | Python, Playwright |
 | [`wechat-publisher-skill`](skills/wechat-publisher-skill) | 将微信格式 HTML 文章一键直推微信公众号官方草稿箱 | `发布微信草稿`、`推送到公众号`、`微信发布` | Python, WeChat API |
@@ -49,3 +50,18 @@ ln -s /path/to/skills/skills/danke-calendar-skill .agents/skills/danke-calendar-
 
 ## 📄 开源协议 (License)
 本项目采用 [MIT License](LICENSE) 开源。
+
+## danke 技能协作与验证
+
+素材写攻略 → `danke-content-creator-skill`；当日规则日历 → `danke-calendar-skill`；已有 Markdown 排版 → `danke-strategy-skill`；草稿上传 → `wechat-publisher-skill`。兑换只处理用户指定名单和礼包码，链接同步只处理 `danke-*` 技能。
+
+所有命令以本仓库根目录为基准。原创技能直接在 `skills/` 维护；`danke-strategy-sync` 默认只检查链接，`--apply` 仅创建缺失链接，冲突目录不覆盖。已有链接立即反映源码修改。
+
+离线回归：
+
+```bash
+python3 -m unittest discover -s tests -p 'test_*.py'
+python3 -m unittest discover -s skills/danke-strategy-skill/test -p 'test_*.py'
+```
+
+第一组不发起兑换、发布或真实 API 请求；第二组需要排版技能 requirements.txt。行为评估用例见 `evals/danke-skills.json`，供 Agent 使用固定故障场景检查路由和报告真实性。

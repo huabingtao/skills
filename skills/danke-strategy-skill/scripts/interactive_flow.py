@@ -8,6 +8,7 @@ import os
 import sys
 import re
 import json
+import shlex
 from pathlib import Path
 
 # Add project root to sys.path
@@ -254,7 +255,8 @@ def main():
     stage3_path = os.path.join(dist_dir, f"{base_name}_stage3_wechat.html")
 
     # ==================== STAGE 1 ====================
-    run_stage_1(input_path, stage1_path, highlight_rules_path, image_mapping_path)
+    if not run_stage_1(input_path, stage1_path, highlight_rules_path, image_mapping_path):
+        raise SystemExit("排版阶段失败，已停止；请勿发布残留产物")
     if not args.yes:
         while True:
             ans = input(
@@ -265,7 +267,8 @@ def main():
             if ans in ('', 'y', 'yes'):
                 break
             elif ans == 'r':
-                run_stage_1(input_path, stage1_path, highlight_rules_path, image_mapping_path)
+                if not run_stage_1(input_path, stage1_path, highlight_rules_path, image_mapping_path):
+                    raise SystemExit("排版阶段失败，已停止；请勿发布残留产物")
             elif ans == 'q':
                 print("👋 已退出流程")
                 sys.exit(0)
@@ -274,7 +277,8 @@ def main():
 
     # ==================== STAGE 2 ====================
     # Read from stage1_path to preserve manual edits
-    run_stage_2(stage1_path, stage2_path, image_mapping_path)
+    if not run_stage_2(stage1_path, stage2_path, image_mapping_path):
+        raise SystemExit("排版阶段失败，已停止；请勿发布残留产物")
     if not args.yes:
         while True:
             ans = input(
@@ -285,7 +289,8 @@ def main():
             if ans in ('', 'y', 'yes'):
                 break
             elif ans == 'r':
-                run_stage_2(stage1_path, stage2_path, image_mapping_path)
+                if not run_stage_2(stage1_path, stage2_path, image_mapping_path):
+                    raise SystemExit("排版阶段失败，已停止；请勿发布残留产物")
             elif ans == 'q':
                 print("👋 已退出流程")
                 sys.exit(0)
@@ -294,7 +299,8 @@ def main():
 
     # ==================== STAGE 3 ====================
     # Read from stage2_path to preserve manual edits
-    run_stage_3(stage2_path, stage3_path, project_config, source_dir=base_dir)
+    if not run_stage_3(stage2_path, stage3_path, project_config, source_dir=base_dir):
+        raise SystemExit("排版阶段失败，已停止；请勿发布残留产物")
     if not args.yes:
         while True:
             ans = input(
@@ -305,7 +311,8 @@ def main():
             if ans in ('', 'y', 'yes'):
                 break
             elif ans == 'r':
-                run_stage_3(stage2_path, stage3_path, project_config, source_dir=base_dir)
+                if not run_stage_3(stage2_path, stage3_path, project_config, source_dir=base_dir):
+                    raise SystemExit("排版阶段失败，已停止；请勿发布残留产物")
             elif ans == 'q':
                 print("👋 已退出流程")
                 sys.exit(0)
@@ -316,7 +323,8 @@ def main():
     # 微信发布能力已独立为 wechat-publisher-skill，请单独调用：
     skill_root = Path(__file__).resolve().parents[1]
     sibling_pub = skill_root.parent / "wechat-publisher-skill" / "scripts" / "publish.py"
-    pub_cmd = f"python3 {sibling_pub} -c {stage3_path}" if sibling_pub.is_file() else f"python3 .agents/skills/wechat-publisher-skill/scripts/publish.py -c {stage3_path}"
+    publisher = str(sibling_pub) if sibling_pub.is_file() else ".agents/skills/wechat-publisher-skill/scripts/publish.py"
+    pub_cmd = shlex.join([sys.executable, publisher, "-c", stage3_path] + (["--new"] if args.force_new else []))
 
     print(f"\n✅ [Stage 3] 完成！HTML 已保存至：\n   {stage3_path}")
     print("\n💡 如需发布到微信公众号草稿箱，请使用 wechat-publisher-skill：")

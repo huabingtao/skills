@@ -7,11 +7,13 @@ tags:
   - 游戏攻略
   - 高频问答
   - 养成指南
-cover: "./cover.png"
-cover_vertical: "./cover_vertical.png"
+cover: "./dist/cover.png"
+cover_vertical: "./dist/cover_vertical.png"
 author: "弹壳呱呱"
-date: {{DATE}}
-lastmod: {{DATE}}
+date: "{{DATE}}"
+lastmod: "{{DATE}}"
+recommendations: []
+qrcode_image: false
 ---
 
 ![article-top](img://article-top){type=banner}

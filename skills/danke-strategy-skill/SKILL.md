@@ -1,6 +1,6 @@
 ---
 name: danke-strategy-skill
-description: 专为《弹壳特攻队》攻略提供一键美化排版与微信公众号发布功能。当用户要求“美化”、“排版”或“发布到微信草稿箱”时自动唤醒，接管从 Markdown 格式化、图床上传到自动生成微信草稿的完整工作流。
+description: 将已有《弹壳特攻队》Markdown 攻略编译为微信 HTML 和元数据，用于美化攻略、排版、微信格式转换。写新攻略用 danke-content-creator-skill；仅编译不发布，用户要求草稿发布时再交给 wechat-publisher-skill。
 ---
 
 # 弹壳攻略美化指令集 (Orchestrator)
@@ -19,7 +19,7 @@ description: 专为《弹壳特攻队》攻略提供一键美化排版与微信�
 
 ### 阶段一：文本整理与数值高亮 (Text Cleanup & Numeric Highlighting)
 1. **输入处理**：读取用户提供的原始 Markdown 文本。
-2. **规范化加粗**：将文中的装备、技能、宠物、道具等专有名词直接加粗为 `**名称**`（去掉方括号，严格按照 `packs/danke/formatting_rules.md` 中的定义）。**注意：无序列表项（以 `-` 开头）内部严禁使用加粗语法，若列表中含有 `**...**` 需自动剥离恢复为纯文本。**
+2. **文字样式**：不要求为专有名词自动加粗；遵循现有正文和 `packs/danke/formatting_rules.md`。**注意：无序列表项（以 `-` 开头）内部严禁使用加粗语法，若列表中含有 `**...**` 需自动剥离恢复为纯文本。**
 3. **数值格式与高亮**：文中所有数字禁用千位分隔符逗号 `,`；“钻/钻石/{{钻石}}”前后的数值自动标红；用户明确需要的居中大图使用 `w=80%`；在本阶段根据 `packs/danke/highlight_rules.json` 正则匹配文中的数字与数值，为其添加对应的 HTML 颜色标签（攻击/伤害标红，生命/防御标蓝，冷却/范围标绿）。后续 HTML 编译阶段默认不重复执行高亮，避免嵌套标记。
 
 ---
@@ -52,7 +52,7 @@ recommendations:
 ```
 
 ### 阶段三：微信 HTML 编译与外链处理 (WeChat HTML Compilation)
-1. **HTML 编译**：在后台调用 `scripts/compile.py --pack packs/danke` 编译成带内联 CSS 样式的 HTML。
+1. **HTML 编译**：在后台调用 `skills/danke-strategy-skill/scripts/compile.py --pack skills/danke-strategy-skill/packs/danke` 编译成带内联 CSS 样式的 HTML。
 2. **样式适配**：自动加载主题 CSS 注入到 HTML 的 style 属性，并剔除图片宽高属性防拉伸；不重复执行 Stage 1 已完成的数值高亮。
 3. **外链与注音**：将非微信的外链转换为脚注，处理 `[文字]{注音}` 为 `<ruby>` 标签。
 
@@ -60,7 +60,7 @@ recommendations:
 
 ### 阶段四：按用户请求发布至微信公众号
 
-1. **草稿生成与缓存优先覆盖**：在后台调用 `python3 .agents/skills/wechat-publisher-skill/scripts/publish.py -c <dist/文章_stage3_wechat.html>` 自动上传文章中的本地图片素材，并通过 MD5 缓存去重。全流程默认读取本地 `.wechat_draft_cache.json` 中的 `MediaID` 覆盖更新已有草稿，防止微信后台产生重复冗余草稿；仅在明确指定 `--new` 时创建全新草稿。
+1. **草稿生成与缓存优先覆盖**：在后台调用 `python3 skills/wechat-publisher-skill/scripts/publish.py -c <dist/文章_stage3_wechat.html>` 自动上传文章中的本地图片素材，并通过 MD5 缓存去重。已有缓存 MediaID 时优先更新或跳过未变化内容；没有缓存时首次创建，`--new` 表示明确另建。现有发布脚本在更新失败时可能回退创建，须核对缓存与日志，不能假定一定原地更新，也不要失败后反复提交。
 
 
 
@@ -70,22 +70,36 @@ recommendations:
 - **简写优先且不重复配图**：普通装备等图标统一写 `{{名称}}`；不自行升级为大图、网格或带说明的图片卡片。
 - **文末配置只进元数据**：推荐和二维码由 Frontmatter 控制，正文不插入对应占位符。
 - **按请求精简**：用户要求润色或删减时，删除重复解释和无新增信息的节末总结，保留机制、数值和必要条件；仅排版时不擅自删改正文。
-- **绝对原文保留**：必须逐字保留用户提供的原始策略事实与核心文字，严禁擅自删减或改写原文。
-- **结构原地替换**：严禁改变原文的段落和行内结构。所有美化（加粗、颜色、图片追加）必须在原句位原地进行。
+- **原文与授权范围**：仅排版时保留原文事实、数值、段落和核心文字。用户同时要求润色或删减时可以调整表达，保留影响结论的条件。
+- **结构原地替换**：仅排版时保留原文的段落和行内结构。所有美化（加粗、颜色、图片追加）必须在原句位原地进行。
 - **严禁无序列表加粗**：无序列表项内部严禁使用加粗语法，若输入文本中无序列表包含加粗，引擎需自动格式化剥离为纯文本，彻底解决微信折行 Bug。
 - **标题使用纯文本**：H1、H2、H3 标题不得包含 Emoji。原文标题若带 Emoji，排版阶段应移除 Emoji，并保留标题文字与层级。
 - **自然列表格式**：不得把正文改成 `1. **小标题**：内容` 这类机械的数字、加粗与冒号组合。需要列举时使用自然的无序列表，且列表项内部不使用加粗语法。
-- **一键全自动执行**：直接调用 `python scripts/interactive_flow.py -y <input_file> --pack packs/danke` 运行全自动流程，无需与用户进行交互确认。
+- **一键全自动执行**：直接调用 `python3 skills/danke-strategy-skill/scripts/interactive_flow.py -y <input_file> --pack skills/danke-strategy-skill/packs/danke` 运行全自动流程，无需与用户进行交互确认。
 
 ---
 
 ## 5. 小红书/抖音图文切图联动 (Xiaohongshu / Douyin Card Slicing)
 当用户提出“生成小红书切图”、“公众号转图文”、“小红书卡片生成”、“切图”等诉求时，直接调用 **`article-to-img-skill`** 技能脚本完成原生 HTML 3:4 智能切图：
 
-在工作区根目录运行：
+在技能仓库根目录运行：
 
 ```bash
-python3 .agents/skills/article-to-img-skill/scripts/export_cards.py <dist/文章_stage3_wechat.html>
+python3 skills/article-to-img-skill/scripts/export_cards.py <dist/文章_stage3_wechat.html>
 ```
 
 切图产物必须输出到对应文章目录的 `dist/原生网页直切图_3x4/`。不要把桌面目录作为默认输出位置；桌面只用于用户明确要求的临时导出。
+
+## 6. 可执行入口与验收
+
+从技能仓库根目录执行（其他工作目录使用已解析的绝对路径）：
+
+```bash
+python3 skills/danke-strategy-skill/scripts/interactive_flow.py -y /文章目录/攻略.md --pack skills/danke-strategy-skill/packs/danke
+```
+
+`-y` 只取消排版阶段交互，不授权上传或发布。`--new` 只传入最终提示的发布命令，真正发布由发布技能执行。
+
+检查文章目录 `dist/` 中 `_stage1.md`、`_stage2.md`、`_stage3_wechat.html` 和同名 JSON；所有阶段都需成功，不能把上次残留文件当本次成功。核对标题、核心数值、封面路径可解析、普通链接未损坏、推荐和二维码只出现一次。未找到图片或主题的警告要报告并定位，不忽略。
+
+用户要求微信草稿时读取 `wechat-publisher-skill`，使用现有草稿标识避免重复创建。上传响应不等于最终验证；通过发布接口读回草稿，核对标题、正文关键字和图片地址。读回失败就报告“已提交，尚未验证”，不要盲目重新创建。

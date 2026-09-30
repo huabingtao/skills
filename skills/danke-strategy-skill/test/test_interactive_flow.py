@@ -81,6 +81,32 @@ class TestInteractiveFlow(unittest.TestCase):
             main()  # No SystemExit expected; no publish call expected
 
 
+    def test_failed_stage_does_not_use_stale_outputs(self):
+        source = self.tmp_path / "source.md"
+        source.write_text("# 测试")
+        for failed_stage in (1, 2, 3):
+            with self.subTest(stage=failed_stage), patch("sys.argv", ["flow", str(source), "-y"]), patch("scripts.interactive_flow.run_stage_1", return_value=failed_stage != 1) as stage1, patch("scripts.interactive_flow.run_stage_2", return_value=failed_stage != 2) as stage2, patch("scripts.interactive_flow.run_stage_3", return_value=failed_stage != 3) as stage3:
+                with self.assertRaises(SystemExit):
+                    main()
+                if failed_stage == 1:
+                    stage2.assert_not_called()
+                if failed_stage < 3:
+                    stage3.assert_not_called()
+
+    def test_publish_hint_quotes_paths_and_passes_new_flag(self):
+        import io
+        import shlex
+        from contextlib import redirect_stdout
+        source = self.tmp_path / "有 空格.md"
+        source.write_text("# 测试")
+        output = io.StringIO()
+        with patch("sys.argv", ["flow", str(source), "-y", "--new"]), redirect_stdout(output):
+            main()
+        command = next(line.strip() for line in output.getvalue().splitlines() if " -c " in line)
+        args = shlex.split(command)
+        self.assertEqual(args[args.index("-c") + 1], str(self.tmp_path / "dist/有 空格_stage3_wechat.html"))
+        self.assertEqual(args[-1], "--new")
+
     def test_word_count_and_ad_tier_evaluation(self):
         from scripts.interactive_flow import get_article_word_count, format_ad_tier_status
         sample_short = "---\ntitle: test\n---\n这是一段非常短的快讯通知，字数在五十个字左右。"

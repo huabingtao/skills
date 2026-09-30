@@ -1,115 +1,46 @@
 ---
 name: danke-calendar-skill
-description: "专为《弹壳特攻队》每日活动待办与倒计时日历打造的专属创作技能。100%严格依据后台/danke-mcp-server查询出来的规则事实(statusText + digestNote)生成极简清单（单行展示），并在文末精选推荐3篇往期攻略以纯文字居中链接展示，封面统一使用全特工专属底图并渲染「弹壳特攻队 提醒日历YYYY.M.D」。输出路径规范为 project/danke-creator/my-articles-md/提醒/YY.M.D/YY.M.D.md。当用户说'生成弹壳日历'、'生成每日提醒'、'写日历文章'、'今天的日历'、'calendar'、'danke calendar'、'daily reminder'、'生成今日待办'时触发。"
+description: 根据 danke MCP 的当日规则生成《弹壳特攻队》每日提醒 Markdown 和双规格封面。用于“生成弹壳日历”“今天的弹壳待办”“写每日日历”；普通日程安排、月度活动预告和系统定时提醒不使用本技能。
 ---
 
-# danke-calendar-skill
+# 弹壳每日提醒
 
-专为《弹壳特攻队》自媒体运营打造的**每日玩法待办与倒计时日历**内容创作 Skill。
-全自动对接数据中心（`danke-mcp-server` / `danke-core`），动态计算当天全部活动规则状态，按统一规范生成客观、真实、无 AI 编造内容的极简每日待办日历初稿。
+## 输入与事实来源
 
----
+- 目标日期默认取 Asia/Shanghai 当天，格式 `YYYY-MM-DD`；用户指定日期优先。
+- 先调用 danke MCP `get_reminder_rules(date=目标日期, onlyDigest=true)`，检查无错误，再解析 `content` 中 text 的 JSON，保存至文章 `dist/digest.json`。只接受日期匹配、包含 `items` 数组的数据。
+- MCP 不可用时核对注册配置和重启状态，不能假装调用成功。不要用缓存、旧文章或本地简化算法计算当日状态。
+- 用户明确接受直接查询 danke-core 时，可用 `--api-base http://localhost:3000`；这是 HTTP 来源，不能描述为 MCP 查询。脚本不静默切换来源。
+- 清单仅来自 `name`、`statusText`、`digestNote`，允许去除重复名称和换行、添加颜色；不扩写后台未提供的建议。剩余天数为空的项目排最后，不当成 0 天。空数组说明本次返回 0 项，不推断游戏无活动。
 
-## 🎯 触发词
+## 生成
 
-- "生成今天的弹壳日历"
-- "生成今天的每日提醒"
-- "写一篇每日日历公众号"
-- "生成今日待办事项"
-- "查询今天有什么活动日历并生成文章"
-- "calendar"
-- "danke calendar"
-- "daily reminder"
-- "/danke-calendar-skill"
-
----
-
-## ⚠️ 核心铁律与事实准则
-
-1. **【100% 严格基于后台事实】**：
-   - 文章正文的各规则描述与备注，**必须 100% 严格使用后台/API 查询返回的实际文案与备注（即 `statusText` 与 `digestNote`）**；
-   - **严禁 AI 擅自扩写、推测或编造任何非后台配置的打卡建议/游戏攻略！**
-2. **【单行紧凑清单格式】**：
-   - 简短开篇后，使用自然的无序列表列出玩法名称、倒计时状态与备注。列表项保持单行，不使用数字序号、加粗小标题或 `>` 引用块，例如：
-     ```markdown
-     - 神秘商人：离本轮【神秘商人】结束还剩 3 天（记得助力后及时购买）
-     ```
-3. **【Frontmatter 元数据纯自动驱动（废弃正文宏占位符）】**：
-   - 往期推荐与二维码完全由 Frontmatter 中的 `recommendations:` 与 `qrcode_image:` 元数据声明；
-   - **正文中严禁书写 `{{往期推荐}}` 或 `{{扫码获取更多精彩}}` 等已废弃的旧版手工占位符**，排版编译引擎会自动在免责声明前注入对应模块；
-   - 往期推荐采用纯文本水平居中优雅链接风格（无小图标、无卡片图片）。
-4. **【专属封面固化规范】**：
-   - 封面底图统一使用全特工紫光专属原图（`assets/reminder_cover_bg.jpg`）；
-   - 封面文字统一渲染为双行居中：`弹壳特攻队\n每日日历`。
-5. **【目录与文件命名规范】**：
-   - 必须按短格式日期目录存放：`project/danke-creator/my-articles-md/提醒/YY.M.D/YY.M.D.md`（例如 `26.9.5/26.9.5.md`）。
-6. **【专有名词宏自动标注】**：
-   - 自动挂载 `auto_tag.py`，为游戏实体包裹 `{{...}}` 宏标签。
-
----
-
-## 📝 标准 Frontmatter 与正文结构模板
-
-```yaml
----
-title: "【弹壳日历】[YY]年[M]月[D]日"
-social_title: "[YY]年[M]月[D]日弹壳日历"
-summary: "[YY]年[M]月[D]日《弹壳特攻队》全量[N]大玩法待办与倒计时清单汇总。"
-tags:
-  - 弹壳特攻队
-  - 游戏攻略
-  - 弹壳日历
-  - 每日待办
-cover: "./dist/cover.png"
-cover_vertical: "./dist/cover_vertical.png"
-author: "弹壳呱呱"
-date: YYYY-MM-DD
-lastmod: YYYY-MM-DD
-qrcode_image: "img://弹壳呱呱微信公众号二维码"
-recommendations:
-  - title: "【推荐文章一标题】"
-    url: ""
-  - title: "【推荐文章二标题】"
-    url: ""
-  - title: "【推荐文章三标题】"
-    url: ""
----
-```
-
-### 正文模板
-
-```markdown
-![article-top](img://article-top){type=banner}
-
-# [YY] 年 [M] 月 [D] 日弹壳日历
-
-各位特工大家[早上好/中午好/下午好/晚上好]，我是呱呱！
-
-今天（[YY] 年 [M] 月 [D] 日）游戏内各玩法的最新待办与事项提醒如下：
-
-- [玩法名称1]：[statusText1]（[digestNote1]）
-- [玩法名称2]：[statusText2]
-- [玩法名称3]：[statusText3]（[digestNote3]）
-
----
-
-攻略创作不易，如果帮到了你，请大家多多**转发、点赞和关注**！你们的支持是呱呱持续输出干货的最大动力！
-
-【免责声明】本攻略纯属个人**经验分享**，**仅供参考**，不构成任何消费建议。游戏版本更新较快，具体数值以游戏内实际表现为准。本攻略所引用的美术图片及游戏内截图版权均归 Habby 公司所有。
-```
-
----
-
-## 🛠️ 自动化执行命令
+命令从技能仓库根目录运行；在其他目录执行时，将脚本路径替换为当前技能真实路径。不要依赖旧的 `workspace/skill/` 目录。
 
 ```bash
-# 生成今日日历清单（自动拉取数据、制作封面、生成文章并宏标注）
-python3 .agents/skills/danke-calendar-skill/scripts/generate_reminder.py
-
-# 指定日期生成
-python3 .agents/skills/danke-calendar-skill/scripts/generate_reminder.py --date 2026-09-06
+python3 skills/danke-calendar-skill/scripts/generate_reminder.py \
+  --date 2026-09-30 --digest-file /文章目录/dist/digest.json \
+  --output-dir /文章目录
 ```
 
-## Codex 规则来源与输出
+- 默认文章位置：工作区 `project/danke-creator/my-articles-md/提醒/YY.M.D/YY.M.D.md`；兼容已有 `content/danke-creator`。工作区可用 `WORKSPACE_ROOT` 指定，独立安装可直接用 `--output-dir`。
+- 原文存在时停止；用户已要求覆盖/更新同日日历时加 `--force`，不必重复确认。
+- 默认生成 `dist/cover.png`、`dist/cover_vertical.png`，并调用同级排版技能进行宏标注。底图为本技能 `assets/reminder_cover_bg.jpg`；标题双行居中：`弹壳特攻队\n提醒日历YYYY.M.D`。
+- `--skip-covers --no-auto-tag` 用于只生成文本或离线检查。跳过封面时元数据仍是约定路径，发布前必须补齐文件。
+- 缺少脚本、封面生成失败或数据无效时退出失败，不覆盖已有文章，也不声称完整生成。
 
-先调用 danke MCP 的 get_reminder_rules（date=目标日期，onlyDigest=true），将 text 中的 JSON 保存到文章 dist/digest.json，再传入 generate_reminder.py --date YYYY-MM-DD --digest-file <文章/dist/digest.json>。只有 MCP 返回成功且日期正确才能生成。接口不可用时停止，不使用简化 SQLite 算法推算。封面及排版、切图衍生产物均输出到文章 dist/；列表保留颜色提示但不使用加粗。
+## 文章约定
+
+Frontmatter 包含 title、social_title、summary、tags、cover、cover_vertical、author、date、lastmod，以及按需配置的 recommendations、qrcode_image。封面路径为 `./dist/cover.png` 和 `./dist/cover_vertical.png`。
+
+正文保留 Banner、纯文本标题、短开场、单行自然列表及既定文末声明。列表格式：
+
+```markdown
+- 玩法名称：后台状态文案（后台备注）
+```
+
+没有备注就省略括号，不给列表文字加粗。三篇往期推荐只在 Frontmatter 声明，链接来自已有可核对链接池；不写旧版正文宏占位符。问候语取生成时刻的上海时间，推荐顺序由目标日期确定。
+
+## 验收与后续
+
+核对日期、项目数、清单文案、封面日期及文件存在性。报告实际产物与跳过的步骤。仅请求日历时完成源文和封面即可；排版交给 `danke-strategy-skill`，只有用户要求发布才进入 `wechat-publisher-skill`。

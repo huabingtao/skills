@@ -1,0 +1,22 @@
+name: Danke skills offline checks
+on:
+  push:
+    paths: ['skills/danke-*/**', 'tests/**', '.github/workflows/danke-skills.yml']
+  pull_request:
+    paths: ['skills/danke-*/**', 'tests/**', '.github/workflows/danke-skills.yml']
+permissions:
+  contents: read
+jobs:
+  offline-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install formatting and spreadsheet dependencies (no OCR needed)
+        run: python -m pip install -r skills/danke-strategy-skill/requirements.txt pandas openpyxl
+      - name: Danke regressions
+        run: python -m unittest discover -s tests -p 'test_*.py'
+      - name: Formatting regressions
+        run: python -m unittest discover -s skills/danke-strategy-skill/test -p 'test_*.py'
