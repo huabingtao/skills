@@ -1059,10 +1059,9 @@ def build_qrcode_section(soup, project_config, input_dir, metadata, output_dir=N
             print(f"Warning: Failed to generate and download QR code: {e}")
             qr_src = api_url
     else:
-        # Default fallback: Use the static QR code of the Official Account
-        from .compiler import ImageResolver
-        resolver = ImageResolver(project_config, input_dir=input_dir)
-        qr_src = resolver.resolve_image_src("img://弹壳呱呱微信公众号二维码")
+        # Footer content is opt-in through frontmatter, like recommendations.
+        # Legacy body placeholders alone must not add a default account QR code.
+        return None
 
     # Get author name for display (default to 弹壳呱呱)
     author_name = metadata.get('author') or project_config.get('author') or "弹壳呱呱"
@@ -1147,7 +1146,7 @@ def build_qrcode_section(soup, project_config, input_dir, metadata, output_dir=N
 def replace_qrcode_placeholder(soup, project_config, input_dir, metadata, output_dir=None):
     """
     Finds placeholder {{扫码获取更多精彩}} and replaces it in-place with the QR code section.
-    If no placeholder is in body text, auto-inserts before disclaimer.
+    If QR metadata is configured, auto-inserts before disclaimer without a body placeholder.
     """
     target_node = None
     placeholder_text = None

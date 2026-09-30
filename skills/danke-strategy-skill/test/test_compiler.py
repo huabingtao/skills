@@ -274,15 +274,64 @@ class TestWeChatCompiler(unittest.TestCase):
         qr_title = soup.find(lambda tag: tag.name == 'section' and "扫码获取更多精彩" in tag.get_text())
         self.assertIsNone(qr_title)
 
-    def test_qrcode_default_static_image(self):
-        """Verify that QR code defaults to the static image provided by the user when no custom url/image is in frontmatter."""
-        md = "---\ntitle: 测试文章\nauthor: 弹壳小能手\n---\n这里是内容。\n\n{{扫码获取更多精彩}}"
+    def test_qrcode_requires_explicit_metadata(self):
+        """Neither an ordinary article nor a legacy macro opts in to a QR footer."""
+        for suffix in ("", "\n\n{{扫码获取更多精彩}}"):
+            with self.subTest(suffix=suffix):
+                md = "---\ntitle: 测试文章\n---\n这里是内容。" + suffix
+                html, _ = convert_to_wechat_html(md, self.project_config)
+                soup = BeautifulSoup(html, 'html.parser')
+                self.assertIsNone(soup.find('img', attrs={'alt': '二维码'}))
+                self.assertNotIn("{{扫码获取更多精彩}}", html)
+
+    def test_metadata_footers_and_inline_icons_without_body_macros(self):
+        """Metadata alone renders each footer once, with shorthand icons in tables."""
+        md = """---
+title: 装备测试
+qrcode_image: img://弹壳呱呱微信公众号二维码
+recommendations:
+  - title: 已核对的往期攻略
+    url: https://mp.weixin.qq.com/s/test-guide
+---
+| 装备 | 顺序 |
+|---|---|
+| 双绝枪{{双绝枪}} | 第一件 |
+
+【免责声明】仅供参考。
+"""
+        for legacy_macros in ("", "\n{{往期推荐}}\n\n{{扫码获取更多精彩}}"):
+            with self.subTest(legacy=bool(legacy_macros)):
+                html, _ = convert_to_wechat_html(md + legacy_macros, self.project_config)
+                soup = BeautifulSoup(html, 'html.parser')
+                self.assertEqual(len(soup.find_all('img', alt='二维码')), 1)
+                self.assertEqual(len(soup.find_all('a', href='https://mp.weixin.qq.com/s/test-guide')), 1)
+                icon = soup.find('td').find('img', alt='双绝枪')
+                self.assertIsNotNone(icon)
+                self.assertTrue(icon.get('src'))
+                self.assertIn('width: 24px', icon.get('style', ''))
+                self.assertNotIn('{{', html)
+                if not legacy_macros:
+                    self.assertLess(html.index('往期精彩推荐'), html.index('【免责声明】'))
+                    self.assertLess(html.index('扫码获取更多精彩'), html.index('【免责声明】'))
+
+    def test_metadata_footers_can_be_disabled(self):
+        md = """---
+title: 不含文末区块
+recommendations: []
+qrcode_image: false
+qrcode_url: https://example.com/follow
+---
+正文。
+
+{{往期推荐}}
+
+{{扫码获取更多精彩}}
+"""
         html, _ = convert_to_wechat_html(md, self.project_config)
         soup = BeautifulSoup(html, 'html.parser')
-        
-        img = soup.find('img', attrs={'alt': '二维码'})
-        # When no qrcode_url / qrcode_image in frontmatter, the img tag still renders (src may be empty or config-relative)
-        self.assertIsNotNone(img)
+        self.assertIsNone(soup.find('img', alt='二维码'))
+        self.assertNotIn('往期精彩推荐', soup.get_text())
+        self.assertNotIn('{{', html)
 
     def test_unordered_list_normalization(self):
         """Verify that unordered lists starting with '*' or '+' are normalized to '-' during preprocess."""
