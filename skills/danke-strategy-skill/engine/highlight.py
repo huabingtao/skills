@@ -89,16 +89,26 @@ def apply_highlight_rules(md_content, rules):
                 continue
             try:
                 compiled = re.compile(pattern)
-                if compiled.groups > 0:
-                    md_content = compiled.sub(
-                        rf'<strong><font color="{hex_value}">\1</font></strong>',
-                        md_content
-                    )
-                else:
-                    md_content = compiled.sub(
-                        rf'<strong><font color="{hex_value}">\g<0></font></strong>',
-                        md_content
-                    )
+                # Only visible prose is eligible. Protect URLs, image alt text,
+                # attributes, code and previously highlighted values from regexes
+                # such as "9s" that may also occur inside a WeChat article ID.
+                protected = [m.span() for m in re.finditer(
+                    r'```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]*`'
+                    r'|<strong><font\b[^>]*>[\s\S]*?</font></strong>'
+                    r'|!\[[^\]\n]*\]\((?:[^()\n]|\([^()\n]*\))*\)(?:\{[^}]*\})?'
+                    r'|(?<=\]\()(?:[^()\n]|\([^()\n]*\))*(?=\))'
+                    r'|https?://[^\s<>]+|\{\{[^}]*\}\}'
+                    r'|<[^>]*>', md_content
+                )]
+
+                def highlight_match(match):
+                    if any(match.start() < end and match.end() > start
+                           for start, end in protected):
+                        return match.group(0)
+                    value = match.group(1) if compiled.groups else match.group(0)
+                    return f'<strong><font color="{hex_value}">{value}</font></strong>'
+
+                md_content = compiled.sub(highlight_match, md_content)
             except re.error as e:
                 desc = rule.get('description', pattern)
                 print(f"⚠ Warning: Invalid highlight regex for '{desc}': {e}")
