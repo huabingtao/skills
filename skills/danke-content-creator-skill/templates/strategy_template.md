@@ -11,6 +11,15 @@ cover_vertical: "./cover_vertical.png"
 author: "弹壳呱呱"
 date: {{DATE}}
 lastmod: {{DATE}}
+qrcode_image: "img://弹壳呱呱微信公众号二维码"
+# recommendations 从推荐池中随机抽取 3 篇（可用 python3 scripts/pick_recommendations.py 生成）
+recommendations:
+  - title: "【工具】手把手教你使用弹壳特攻队伤害计算器"
+    url: "https://mp.weixin.qq.com/s/vN79nJW3Cyn9sy0UDGvKaw"
+  - title: "【特工攻略】弹壳特攻队从入门到入土特工篇"
+    url: "https://mp.weixin.qq.com/s/5Ar4FIsI0YvgqDk46-fHyw"
+  - title: "【宠物攻略】S宠物培养全指南——从入门到入土"
+    url: "https://mp.weixin.qq.com/s/pJitLL_Vu7wI9ctzSM-EMg"
 ---
 
 > 💡 **温馨提示**：本攻略所有数值计算与代币统计**均未计入看广告获取的额外代币**，玩家可根据自身情况灵活叠加！

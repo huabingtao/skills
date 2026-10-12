@@ -67,6 +67,28 @@ recommendations:
 - 往期推荐和公众号二维码只在 Frontmatter 配置 `recommendations`、`qrcode_image`，由排版技能自动生成文末区块。正文不要添加 `{{往期推荐}}`、`{{往期精彩推荐}}`、`{{扫码获取更多精彩}}`，也不要重复手写推荐区或二维码图。
 - 不需要时用 `recommendations: []`、`qrcode_image: false`；字段省略时也不生成对应区块。
 
+### 往期推荐池与随机 3 篇链接注入规范 (Recommendations Pool)
+
+在创作新攻略文章时，Frontmatter 中的 `recommendations:` **必须从以下 8 篇官方精选文章池中随机挑选 3 篇填充**（或调用 `python3 scripts/pick_recommendations.py` 自动抽样）：
+
+| 序号 | 文章名称 | 永久链接 |
+| :---: | :--- | :--- |
+| 1 | 【载具攻略】载具零件怎么摆？四种摆法与分配顺序参考 | https://mp.weixin.qq.com/s/Y2qGmNvrl6uhn8TE53dG-g |
+| 2 | 【特工攻略】弹壳特攻队从入门到入土特工篇 | https://mp.weixin.qq.com/s/5Ar4FIsI0YvgqDk46-fHyw |
+| 3 | 【载具攻略】从入门到入土载具篇 | https://mp.weixin.qq.com/s/U4MdV7UYFi4unPy6PawVog |
+| 4 | 【宠物攻略】S宠物培养全指南——从入门到入土 | https://mp.weixin.qq.com/s/pJitLL_Vu7wI9ctzSM-EMg |
+| 5 | 弹壳特攻队高频问答第一弹 | https://mp.weixin.qq.com/s/QMfvpK7okI0yFyg2kRYkXQ |
+| 6 | 手把手教会你用弹壳伤害计算器 | https://mp.weixin.qq.com/s/vN79nJW3Cyn9sy0UDGvKaw |
+| 7 | SS神装打造优先级——合成顺序深度解析 | https://mp.weixin.qq.com/s/DvQ9EJ7Yu4lVLtPLhkqPeg |
+| 8 | 【高频问答第二弹】《弹壳特攻队》 | https://mp.weixin.qq.com/s/LFca8kzXxbcglBcQP19hoA |
+
+**排重与抽取铁律：**
+1. **恰好抽取 3 篇**：每次生成新攻略必须从上述 8 篇中随机挑选 3 篇不同链接；
+2. **主题避嫌排重**：若当前创作的主题与某篇推荐重合（如正在写载具攻略，需排除包含“载具”的文章），必须从剩余文章中抽取 3 篇，避免自引；
+3. **辅助抽样脚本**：可随时在终端运行：
+   `python3 .agents/skills/danke-content-creator-skill/scripts/pick_recommendations.py [--exclude <关键词>]`
+   直接复制输出的标准 YAML 片段至 Frontmatter。
+
 ### 文章顶部 Banner 规范
 Frontmatter 结束后的正文最顶部，第一行紧跟顶部开篇 Banner 图：
 `![article-top](img://article-top){type=banner}`
