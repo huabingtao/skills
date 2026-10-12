@@ -77,18 +77,59 @@ def validate_digest(data: dict, target_date: str) -> dict:
 
 RECOMMENDED_ARTICLES_POOL = [
     {
-        "title": "【攻略】高频问答FAQ第一弹：特工选择、狼马对比与配件过载全指南",
+        "title": "【载具攻略】载具零件怎么摆？四种摆法与分配顺序参考",
+        "url": "https://mp.weixin.qq.com/s/Y2qGmNvrl6uhn8TE53dG-g",
+    },
+    {
+        "title": "【特工攻略】弹壳特攻队从入门到入土特工篇",
+        "url": "https://mp.weixin.qq.com/s/5Ar4FIsI0YvgqDk46-fHyw",
+    },
+    {
+        "title": "【载具攻略】从入门到入土载具篇",
+        "url": "https://mp.weixin.qq.com/s/U4MdV7UYFi4unPy6PawVog",
+    },
+    {
+        "title": "【宠物攻略】S宠物培养全指南——从入门到入土",
+        "url": "https://mp.weixin.qq.com/s/pJitLL_Vu7wI9ctzSM-EMg",
+    },
+    {
+        "title": "弹壳特攻队高频问答第一弹",
         "url": "https://mp.weixin.qq.com/s/QMfvpK7okI0yFyg2kRYkXQ",
     },
     {
-        "title": "【工具】手把手教你使用弹壳特攻队伤害计算器",
+        "title": "手把手教会你用弹壳伤害计算器",
         "url": "https://mp.weixin.qq.com/s/vN79nJW3Cyn9sy0UDGvKaw",
     },
     {
-        "title": "【攻略】s宠物从入门到入土！",
-        "url": "https://mp.weixin.qq.com/s/pJitLL_Vu7wI9ctzSM-EMg",
+        "title": "SS神装打造优先级——合成顺序深度解析",
+        "url": "https://mp.weixin.qq.com/s/DvQ9EJ7Yu4lVLtPLhkqPeg",
+    },
+    {
+        "title": "【高频问答第二弹】《弹壳特攻队》",
+        "url": "https://mp.weixin.qq.com/s/LFca8kzXxbcglBcQP19hoA",
     },
 ]
+
+HIGHLIGHTED_REMINDER_NAMES = {"逃离行动", "区域行动", "联机挑战"}
+
+
+def load_recommendations_pool() -> list[dict]:
+    """优先加载 recommendations_pool.json，若不可用则回退至内置完整 8 篇池"""
+    candidates = [
+        Path(__file__).resolve().parents[2] / "danke-strategy-skill/packs/danke/config/recommendations_pool.json",
+        Path.cwd() / ".agents/skills/danke-strategy-skill/packs/danke/config/recommendations_pool.json",
+        Path("/Users/hbt/skills/skills/danke-strategy-skill/packs/danke/config/recommendations_pool.json"),
+    ]
+    for c in candidates:
+        if c.exists():
+            try:
+                with open(c, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, list) and len(data) >= 3:
+                        return data
+            except Exception:
+                pass
+    return RECOMMENDED_ARTICLES_POOL.copy()
 
 
 def highlight_urgent_status(status_text: str, days_remaining: int, is_redeem_day: bool = False) -> str:
@@ -140,7 +181,8 @@ def build_reminder_article(data: dict) -> str:
 
     # 随机挑选 3 篇推荐文章（使用目标日期作为随机种子以保证同一天生成的幂等性）
     random.seed(int(dt.strftime("%Y%m%d")))
-    selected_articles = random.sample(RECOMMENDED_ARTICLES_POOL, min(3, len(RECOMMENDED_ARTICLES_POOL)))
+    pool = load_recommendations_pool()
+    selected_articles = random.sample(pool, min(3, len(pool)))
 
     greeting = get_time_greeting()
 
@@ -184,12 +226,17 @@ def build_reminder_article(data: dict) -> str:
         status_text = clean_status_text(raw_status_text, name)
         status_text = highlight_urgent_status(status_text, days_remaining, is_redeem_day)
         note = item.get("digestNote")
+        display_name = (
+            f'<font color="#dc2626">{name}</font>'
+            if name in HIGHLIGHTED_REMINDER_NAMES
+            else name
+        )
         
         # 单行展示：自然无序列表 + 玩法名称 + 状态文案（备注）
         if note and note.strip():
-            lines.append(f"- {name}：{status_text}（{note.strip()}）")
+            lines.append(f"- {display_name}：{status_text}（{note.strip()}）")
         else:
-            lines.append(f"- {name}：{status_text}")
+            lines.append(f"- {display_name}：{status_text}")
 
     lines.append("")
     lines.append("---")

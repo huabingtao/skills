@@ -38,7 +38,7 @@ def auto_tag_text(content: str, keywords: list) -> str:
             body = parts[2]
 
     # Split body into protected tokens (code blocks, existing tags {{...}}, markdown images/links !?[...](...))
-    token_pattern = re.compile(r'(`[^`]+`|\{\{[^{}]+\}\}|!?\[[^\]]*\]\([^)]+\)|#+[^\n]+)')
+    token_pattern = re.compile(r'(`[^`]+`|\{\{[^{}]+\}\}|!?\[[^\]]*\]\([^)]+\)|(?m:^#+[^\n]+))')
     segments = token_pattern.split(body)
 
     for idx, seg in enumerate(segments):
