@@ -3,6 +3,7 @@
   "description": "Survivor.io 游戏攻略内容包",
   "author": "弹壳呱呱",
   "image_mapping": "image_mapping.json",
+  "image_mapping_short": "image_mapping_short.json",
   "image_mapping_cos": "image_mapping_cos.json",
   "cos_mode": false,
   "cos_base_url": "https://dankeres.guaguahub.cn/danke-assets",
@@ -10,5 +11,6 @@
   "templates_dir": "templates",
   "highlight_rules": "highlight_rules.json",
   "theme": "minimal",
+  "diamond_table_unit_in_header": true,
   "container_font": "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif"
 }

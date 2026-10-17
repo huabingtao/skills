@@ -3,13 +3,14 @@
 douyin_uploader.py - Playwright-based Douyin Creator Platform automation.
 
 Handles:
-  - Cookie-based session persistence (~/.douyin_cookie.json)
+  - Persistent browser session (~/.douyin_user_data)
   - Headful login with QR code scanning
-  - Headless image-text post creation (draft mode)
+  - Headed image-text upload with manual review by default
 """
 
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -18,6 +19,22 @@ USER_DATA_DIR = Path.home() / ".douyin_user_data"
 STORAGE_STATE_PATH = Path.home() / ".douyin_storage_state.json"
 CREATOR_URL = "https://creator.douyin.com"
 UPLOAD_URL = f"{CREATOR_URL}/creator-micro/content/upload?default-tab=3"
+
+
+def verify_post_fields(title_input, body_editor, title, body_text):
+    """Read back the filled controls; a successful typing call alone is insufficient."""
+    if title_input is None or body_editor is None:
+        raise RuntimeError("标题或正文编辑器未填写完成，不能报告审核页就绪")
+    actual_title = title_input.input_value()
+    actual_body = (body_editor.inner_text()
+                   if body_editor.get_attribute("contenteditable") == "true"
+                   else body_editor.input_value())
+    normalize = lambda value: re.sub(r"[\s\u200b\ufeff]+", "", value)
+    if actual_title != title[:20]:
+        raise RuntimeError("标题回读与预期不一致，保留页面供检查")
+    if normalize(body_text) not in normalize(actual_body):
+        raise RuntimeError("正文或话题回读不完整，保留页面供检查")
+    return {"title": actual_title, "body": actual_body}
 
 
 def _get_dist_dir(image_paths: list[str] = None) -> Path:
@@ -174,14 +191,18 @@ def upload_image_post(
     image_paths: list[str],
     title: str,
     body_text: str,
-    headless: bool = True,
+    headless: bool = False,
     publish_now: bool = False,
-    review: bool = False,
+    review: bool = None,
 ):
     """
     Upload an image-text post to Douyin creator platform using persistent context.
     If session is invalid/expired, automatically prompts for QR scan in headed mode.
     """
+    if review is None:
+        review = not publish_now
+    if review and (headless or publish_now):
+        raise ValueError("人工审核必须使用有头浏览器，不能同时请求自动发布")
     USER_DATA_DIR.mkdir(parents=True, exist_ok=True)
 
     context = playwright.chromium.launch_persistent_context(
@@ -385,6 +406,7 @@ def upload_image_post(
         ]
 
         title_filled = False
+        filled_title_input = None
         for selector in title_selectors:
             try:
                 title_input = page.locator(selector).first
@@ -392,6 +414,7 @@ def upload_image_post(
                     title_input.click()
                     title_input.fill(title[:20])
                     title_filled = True
+                    filled_title_input = title_input
                     print(f"   ✅ 标题已填写 (selector: {selector})")
                     break
             except Exception:
@@ -413,6 +436,7 @@ def upload_image_post(
         ]
 
         body_filled = False
+        filled_body_editor = None
         for selector in body_selectors:
             try:
                 body_editor = page.locator(selector).first
@@ -421,6 +445,7 @@ def upload_image_post(
                     time.sleep(0.3)
                     page.keyboard.type(body_text, delay=20)
                     body_filled = True
+                    filled_body_editor = body_editor
                     print(f"   ✅ 正文已填写 (selector: {selector})")
                     break
             except Exception:
@@ -431,8 +456,11 @@ def upload_image_post(
 
         time.sleep(1)
 
+        verified_fields = verify_post_fields(filled_title_input, filled_body_editor, title, body_text)
         debug_path_filled = str(dist_dir / "_douyin_step3_filled.png")
         page.screenshot(path=debug_path_filled)
+        if review:
+            page.screenshot(path=str(dist_dir / "douyin_review_content.png"), full_page=True)
 
         # 6. Action: Review, Publish or Save Draft
         page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
@@ -443,9 +471,9 @@ def upload_image_post(
             print("👀 页面已就绪！已为您停留在编辑页面供人工审核 (REVIEW MODE)")
             print("=" * 50)
             print("您可以直接在桌面浏览器中逐项核对：")
-            print("  1. 4 张切图与封面排版")
+            print(f"  1. {len(image_paths)} 张图片与封面排版")
             print("  2. 标题、文案与话题标签")
-            print("核对完毕后，您可直接在页面右下角手动点击【发布】或【暂存离开】。")
+            print("浏览器保留在编辑页，由您自行决定并手动发布；本流程不点击发布或暂存离开。")
 
         elif publish_now:
             print("🚀 正在查找并点击'发布'按钮...")
@@ -543,6 +571,18 @@ def upload_image_post(
         page.screenshot(path=draft_result_path)
         print(f"📸 最终草稿截图已保存至: {draft_result_path}", flush=True)
 
+        if review:
+            record = {
+                "status": "review_ready", "url": page.url,
+                "requested_image_count": len(image_paths),
+                "images": image_paths, "verified_fields": verified_fields,
+                "publish_clicked": False, "save_draft_clicked": False,
+                "screenshots": ["douyin_review_content.png", "douyin_draft_result.png"],
+            }
+            (dist_dir / "douyin_review_result.json").write_text(
+                json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+            page.evaluate("window.scrollTo(0, 0)")
+
         if not headless:
             print("\n🌟 浏览器窗口已在桌面打开并保持开启，方便您查看与确认！", flush=True)
             print("   （如需关闭，可直接手动关闭浏览器窗口）", flush=True)
@@ -560,6 +600,12 @@ def upload_image_post(
             print(f"📸 错误截图已保存: {screenshot_path}", flush=True)
         except Exception:
             pass
+        if review and not headless:
+            print(f"❌ 上传未完整完成：{e}。保留浏览器供人工检查，不执行发布或保存草稿。", flush=True)
+            try:
+                page.wait_for_event("close", timeout=0)
+            except Exception:
+                pass
         raise
     finally:
         context.close()

@@ -546,8 +546,18 @@ def main():
     parser.add_argument("--height", type=int, default=1440, help="卡片基准高度 (默认: 1440)")
     parser.add_argument("--dpr", type=int, default=2, help="设备像素比 DPR (默认: 2，生成 2160x2880)")
     parser.add_argument("--overlap", type=int, default=140, help="多图重叠像素深度 (默认: 140)")
+    parser.add_argument("--profile", choices=["direct", "douyin"], default="direct",
+                        help="direct 保持原直切流程；douyin 使用暖灰大字分页提纲")
+    parser.add_argument("--outline", help="抖音分页提纲 JSON；默认查找文章目录/抖音提纲.json")
 
     args = parser.parse_args()
+    if args.profile == "douyin":
+        from douyin_cards import render_douyin_cards
+        render_douyin_cards(resolve_wechat_html(args.input_path), args.outline,
+                            args.output, args.width, args.height, args.dpr)
+        return
+    if args.outline:
+        parser.error("--outline 仅用于 --profile douyin")
     direct_slice_html(
         args.input_path,
         output_dir=args.output,

@@ -13,6 +13,8 @@ from bs4 import BeautifulSoup
 
 from .utils import scan_assets, ensure_placeholder_exists, load_image_mapping
 from .highlight import load_highlight_rules, apply_highlight_rules
+from .table_units import normalize_diamond_table_units
+from .short_mapping import load_short_mapping
 
 
 def parse_css(css_content):
@@ -296,6 +298,18 @@ class ImageResolver:
                     self.assets_cache[k] = v
 
         self.image_mapping = load_image_mapping(self.image_mapping_path) if self.image_mapping_path else {}
+        local_path = self.project_config.get("local_image_mapping_path") or self.image_mapping_path
+        self.local_image_mapping = load_image_mapping(local_path) if local_path else self.image_mapping
+        self.local_names = {}
+        self.names_by_local_path = {}
+        for name, asset in self.local_image_mapping.items():
+            self.local_names.setdefault(name.strip(), name)
+            self.names_by_local_path.setdefault(asset, []).append(name)
+        short_path = self.project_config.get("short_image_mapping_path")
+        self.short_image_mapping = load_short_mapping(
+            short_path, self.local_image_mapping,
+            os.path.dirname(os.path.abspath(self.assets_dir)) if self.assets_dir else os.path.dirname(local_path)
+        ) if short_path and local_path else {}
 
 
     def check_file_exists(self, path):
@@ -393,6 +407,11 @@ class ImageResolver:
             return src
 
         src_clean = src.replace('img://', '')
+        short_target = self.short_image_mapping.get(src_clean)
+        # Exact legacy names retain priority. Short names reference a local full
+        # name, never another short alias or a guessed asset/URL.
+        if short_target and src_clean not in self.image_mapping:
+            src_clean = short_target
         base_name = os.path.basename(src_clean)
         key_name = os.path.splitext(base_name)[0]
 
@@ -404,6 +423,20 @@ class ImageResolver:
                 return mapped_path
             if self.check_file_exists(mapped_path):
                 return self.relative_to_input_or_project(mapped_path)
+
+        # Missing COS aliases and legacy trailing spaces must use a known exact
+        # asset identity before falling back to filename/substring matching.
+        local_name = self.local_names.get(src_clean.strip())
+        if local_name:
+            local_asset = self.local_image_mapping[local_name]
+            for alias in [local_name] + self.names_by_local_path[local_asset]:
+                candidate = self.image_mapping.get(alias)
+                if candidate and candidate.startswith(('http://', 'https://')):
+                    return candidate
+                if candidate and self.check_file_exists(candidate):
+                    return self.relative_to_input_or_project(candidate)
+            if self.check_file_exists(local_asset):
+                return self.relative_to_input_or_project(local_asset)
 
         if self.check_file_exists(src_clean):
             return self.relative_to_input_or_project(src_clean)
@@ -1247,6 +1280,8 @@ def convert_to_wechat_html(md_content, project_config, input_dir=None, output_di
     apply_css_theme(soup, theme_path)
 
     process_soup_images(soup, resolver)
+    if project_config.get("diamond_table_unit_in_header", False):
+        normalize_diamond_table_units(soup)
     append_external_link_footnotes(soup)
     cleanup_list_text_nodes(soup)
     convert_lists_to_emoji_paragraphs(soup)

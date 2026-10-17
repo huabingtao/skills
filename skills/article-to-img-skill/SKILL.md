@@ -1,61 +1,41 @@
 ---
 name: article-to-img-skill
-description: "直接渲染经过 danke-strategy-skill 编译的微信文章 _wechat.html 网页，按 3:4 (1080x1440 / 2160x2880) 比例进行零留白平滑自适应切图，自动生成适合小红书及抖音的高清图文图集。触发词：微信文章转小红书, 公众号生成切图, 文章转图文, xhs卡片生成, 分割文章, 切图, 直接切图, 导出卡片, article to img"
+description: "将已编译的微信文章转为 3:4 图文卡片。抖音默认暖灰大字重点卡＋补充页，保留原网页直切模式。触发词：公众号生成切图、文章转图文、导出卡片、抖音大字卡片、article to img。"
 ---
 
-# article-to-img-skill (微信文章 3:4 智能直切图)
+# 微信文章转 3:4 图文卡片
 
-`article-to-img-skill` 是一款专为微信公众号富文本页面打造的高稳定性 **3:4 智能自适应直切图技能**。
+使用本轮最新的 `danke-strategy-skill` 编译结果 `_wechat.html`，复用其中已解析的道具图片。不要直接截图未解析宏的 Markdown；传 `.md` 时脚本会尝试先编译。输出留在文章 `dist/`，不改公众号正文和排版。
 
----
+## 抖音：重点卡＋补充页
 
-## ⚠️ 标准数据流规范 (重要)
+<!-- Correction: 2026-10-17 | source: ep-2026-10-17-douyin-readability | was: 1080px画布22px正文也能手机清晰阅读 | reason: 手机缩放后文字太小，长页二次压缩 -->
 
-- **严禁直接裸切 raw Markdown 源码**：文章中的游戏宏图标（如 `{{钻石}}`、`{{神器核心}}`）、专属配图（如 `img://article-top`、`img://弹壳呱呱微信公众号二维码`）、往期推荐模块及专属主题样式，必须先经过 **`danke-strategy-skill`** 编译生成完整的 `_wechat.html`。
-- **唯一标准输入源**：切图引擎必须以编译后的 **`_wechat.html`** 作为唯一标准渲染源。如果传入 `.md` 文件，脚本会自动优先使用同级最新编译的 `_wechat.html`，或自动调用 `danke-strategy-skill` 全量编译器完成图床与宏解析后再进行切图。
+抖音采用 **暖灰底 `#F2EFE8`＋深灰字 `#242424`**。基准画布1080×1440，正文48px、标题72px、重点数字88px、补充说明和页脚至少36px，四周64px。DPR2输出2160×2880；DPR只提升清晰度，不提升手机可见字号。
 
----
-
-## ✨ 核心功能与亮点
-
-1. **零底部留白自适应平滑切片（Zero Blank Padding）**：
-   - 采用多图平滑重叠步长算法，保证输出的每一张卡片均 **100% 充满 2160x2880 (3:4) 黄金画布**，彻底杜绝底部大面积空白。
-2. **大图自适应约束 + 内联小微标对齐**：
-   - 自动识别正文截图并施加黄金比例缩放（`max-height: 440px; max-width: 88%`），防止长图撑爆网页高度。
-   - 钻石、钥匙、神器核心等游戏宏图标精准内联（`1.25em`），排版工整优雅。
-3. **超高清 DPR=2 采样与手机大字号排版优化**：
-   - 默认以 Device Scale Factor = 2 进行渲染截图，输出 **2160px × 2880px** 视网膜级高清大图。
-   - **大字号易读规范**：HTML 渲染基准字号为 `24px`，正文 `22px`（行高 1.7），标题 H1 `34px`/H2 `28px`/H3 `25px`，游戏宏图标 `28px`。确保卡片在抖音/小红书手机端展示时字号清晰醒目、无阅读门槛。
-4. **配套文案自动生成**：
-   - 自动解析文章 frontmatter 与 metadata，在切图目录生成带标题、摘要与热门话题标签的 `copywriting.txt`。
-
----
-
-## 🚀 使用方法
+先从同一份核对过的数据准备文章目录 `抖音提纲.json`：每页一个结论，先讲目标、累计奖励、开箱和补钻，再放任务明细及实测依据。标题保留“预计”等条件，不把样本写成保底。完整名称配图标，表格最多三列，钻石单位只放表头。提纲格式及续页规则见 [references/douyin_cards.md](references/douyin_cards.md)。
 
 ```bash
-# 标准用法：传入经 danke-strategy-skill 编译后的 HTML 文件
-python3 .agents/skills/article-to-img-skill/scripts/export_cards.py <dist/文章_stage3_wechat.html> [-o 输出目录]
-
-# 快捷用法：若传入 .md，会自动调用 danke-strategy-skill 编译后再切图
-python3 .agents/skills/article-to-img-skill/scripts/export_cards.py <文章.md> [-o 输出目录]
+python3 scripts/export_cards.py "文章目录/dist/攻略_stage3_wechat.html" --profile douyin --outline "文章目录/抖音提纲.json"
 ```
 
-### 示例：
+默认提纲位置为文章目录 `抖音提纲.json`，输出 `dist/抖音图文_3x4/`。脚本用浏览器测量高度，超出就拆段落、列表或表格续页；表头重复，字号不降，禁止整页缩小。放不下的超长单行报错并要求重新组织，不截断。
+
+产物包括编号高清卡片、逐页HTML、`分页文案.json/txt`、`copywriting.txt`、`manifest.json`、`preview.html` 和360／390px手机预览。预览图在 `previews/`，不作为上传素材。缺失图标或图片加载失败时停止；不猜图、不输出损坏图片。
+
+切图后逐页查看手机预览，核对预算、完整累计奖励、估算限制和衔接。内容变更后更新提纲并重新编译、渲染；`source_html_sha256` 能阻止旧提纲配新正文。页数由内容决定，不为凑固定页数缩字，不把大面积空白视为合格。
+
+## 兼容：原网页直切
+
 ```bash
-# 切割文章示例
-python3 .agents/skills/article-to-img-skill/scripts/export_cards.py project/danke-creator/my-articles-md/活动/4周年庆活动介绍/周年庆每天进度/day9/dist/弹壳特攻队4周年庆Day9_stage3_wechat.html
-
+python3 scripts/export_cards.py "文章目录/dist/攻略_stage3_wechat.html"
+# 等价于 --profile direct；输出 dist/原生网页直切图_3x4/
 ```
 
----
+无参数保持原直切行为，兼容历史流程。该模式沿用旧22px正文和长页缩放，不能当作抖音大字模式。用户已提供成品截图卡片时，直接使用原图。
 
-## 📁 输出目录结构
+## 交接
 
-```text
-原生网页直切图_3x4/
-├── 01_切图.png             # 2160x2880 高清 3:4 卡片 1
-├── 02_切图.png             # 2160x2880 高清 3:4 卡片 2
-├── 03_切图.png             # 2160x2880 高清 3:4 卡片 3
-└── copywriting.txt        # 小红书/抖音一键发布文案
-```
+上传前展示整套原图。新版第一张已含封面时设置提纲 `includes_cover: true`；抖音上传器按 `manifest.json` 的顺序取图，不重复添加旧封面、不混入预览截图。原直切目录继续沿用单独竖版封面＋编号切图。
+
+生成图片不等于上传或发布；按用户当次授权调用对应发布技能，抖音默认有头人工审核。

@@ -3,7 +3,7 @@
 publish.py - CLI entry point for douyin-publisher-skill.
 
 Reads metadata from _wechat.json or Markdown frontmatter, assembles
-image list with optional vertical cover, and uploads to Douyin as draft.
+image list with optional vertical cover, and opens Douyin for manual review.
 
 Usage:
     python3 publish.py -i <image_dir> -m <metadata_file>
@@ -11,6 +11,7 @@ Usage:
 """
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -109,6 +110,47 @@ def collect_images(image_dir: str, meta: dict, meta_dir: str = None, cover_overr
     if not img_dir.is_dir():
         raise FileNotFoundError(f"切图目录不存在: {image_dir}")
 
+    # The Douyin renderer owns the exact order; previews and old covers are not uploads.
+    manifest_path = img_dir / "manifest.json"
+    if manifest_path.is_file():
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if manifest.get("profile") != "douyin" or not manifest.get("validation", {}).get("passed"):
+            raise ValueError("卡片清单未通过验证，不能上传")
+        for path, sha in manifest.get("input_sha256", {}).items():
+            source = Path(path)
+            if not source.is_file() or hashlib.sha256(source.read_bytes()).hexdigest() != sha:
+                raise ValueError(f"卡片来源已变化，请重新核对提纲并渲染: {source.name}")
+        ordered = manifest.get("images")
+        if not isinstance(ordered, list) or not ordered or len(set(ordered)) != len(ordered):
+            raise ValueError("卡片清单 images 为空或重复")
+        images = []
+        for name in ordered:
+            if not isinstance(name, str) or Path(name).name != name:
+                raise ValueError("卡片清单只能引用当前目录的图片")
+            image = img_dir / name
+            if not image.is_file() or image.suffix.lower() not in {'.png', '.jpg', '.jpeg', '.webp'}:
+                raise ValueError(f"卡片清单图片缺失或格式不支持: {name}")
+            sha = manifest.get("image_sha256", {}).get(name)
+            if sha and hashlib.sha256(image.read_bytes()).hexdigest() != sha:
+                raise ValueError(f"卡片图片与验证结果不一致: {name}")
+            images.append(str(image.resolve()))
+        if cover_override:
+            cover = Path(cover_override).resolve()
+            if not cover.is_file():
+                raise ValueError(f"指定封面不存在: {cover}")
+            if manifest.get("includes_cover"):
+                images[0] = str(cover)
+            else:
+                images.insert(0, str(cover))
+        elif not manifest.get("includes_cover"):
+            cover = meta.get("cover_vertical")
+            if cover:
+                candidate = Path(meta_dir or img_dir.parent) / cover
+                if candidate.is_file():
+                    images.insert(0, str(candidate.resolve()))
+        print(f"📋 按已验证清单准备 {len(images)} 张图片（不含预览图）")
+        return images
+
     images = []
 
     # 1. Resolve vertical cover
@@ -165,9 +207,9 @@ def collect_images(image_dir: str, meta: dict, meta_dir: str = None, cover_overr
 
 # ─────────────────────────── CLI entry point ─────────────────────────────
 
-def main():
+def parse_args(argv=None):
     parser = argparse.ArgumentParser(
-        description="douyin-publisher-skill: 上传图文至抖音草稿箱",
+        description="douyin-publisher-skill: 上传图文，默认停在有头编辑页供人工发布",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -181,12 +223,22 @@ Examples:
     parser.add_argument("--title", help="覆盖标题 (≤20字)")
     parser.add_argument("--cover", help="覆盖竖版封面图路径")
     parser.add_argument("--login", action="store_true", help="启动浏览器进行扫码登录")
-    parser.add_argument("--headed", action="store_true", help="使用有头浏览器（调试用）")
-    parser.add_argument("--publish", action="store_true", help="直接点击'发布'按钮（默认保存为草稿）")
-    parser.add_argument("--review", action="store_true", help="不点击发布或草稿，停留在编辑页面供人工审核")
+    parser.add_argument("--headed", action="store_true", help="显示浏览器（人工审核模式默认启用）")
+    actions = parser.add_mutually_exclusive_group()
+    actions.add_argument("--publish", action="store_true", help="明确要求时才代为点击发布")
+    actions.add_argument("--review", action="store_true", help="停留编辑页供人工审核（默认）")
+    actions.add_argument("--save-draft", action="store_true", help="明确要求时才保存草稿并离开编辑页")
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    if not args.publish and not args.save_draft:
+        args.review = True
+    if args.review:
+        args.headed = True
+    return args
 
+
+def main(argv=None):
+    args = parse_args(argv)
     # Import Playwright
     try:
         from playwright.sync_api import sync_playwright
@@ -205,7 +257,7 @@ Examples:
 
     # Publish mode — require images and metadata
     if not args.images or not args.metadata:
-        parser.error("发布模式需要同时指定 -i (切图目录) 和 -m (元数据文件)")
+        raise SystemExit("上传需要同时指定 -i (切图目录) 和 -m (元数据文件)")
 
     # Load metadata
     meta_path = os.path.abspath(args.metadata)

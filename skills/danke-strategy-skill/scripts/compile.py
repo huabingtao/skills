@@ -36,6 +36,11 @@ def load_project_config(pack_dir, theme_override=None):
 
     # Resolve relative paths to absolute
     project_config = {}
+    project_config["diamond_table_unit_in_header"] = config.get("diamond_table_unit_in_header", False)
+    if config.get("image_mapping"):
+        project_config["local_image_mapping_path"] = os.path.join(pack_abs, config["image_mapping"])
+    if config.get("image_mapping_short"):
+        project_config["short_image_mapping_path"] = os.path.join(pack_abs, config["image_mapping_short"])
 
     # Image mapping：COS 模式下优先使用 image_mapping_cos.json
     cos_mode = config.get("cos_mode", False)
