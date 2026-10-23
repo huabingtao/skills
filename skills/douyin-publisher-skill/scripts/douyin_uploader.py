@@ -211,6 +211,8 @@ def upload_image_post(
         args=[
             "--no-sandbox",
             "--disable-setuid-sandbox",
+            "--disable-gpu",
+            "--disable-dev-shm-usage",
             "--window-position=50,50",
             "--window-size=1280,900",
             "--start-maximized",
