@@ -43,7 +43,7 @@ description: "分析弹壳特攻队原始素材（截图/文本/数据），按�
 
 公众号草稿更新后，其他平台切图必须从本次最新编译 HTML 重新生成；微信回读图片兼容 `src` 和 `data-src`。抖音沿用有头审核交接，是否点击发布以用户当次要求为准。
 
-抖音默认交给同级 `douyin-publisher-skill` 的奶白紫色模板，每个方案独立成图；具体流程见该技能 `references/card_workflow.md`。卡片与正文引用同一次核算，依次填写目标进度、完整累计奖励、补钻预算、操作建议及估算依据，保留“预计”和样本限制。派生卡片不改写公众号正文；用户明确选择旧版时才使用 `article-to-img-skill --profile douyin`。
+抖音默认交给同级 `douyin-publisher-skill` 的深蓝电竞模板，每个方案独立成图；具体流程见该技能 `references/card_workflow.md`。卡片与正文引用同一次核算，依次填写目标进度、完整累计奖励、补钻预算、操作建议及估算依据，保留“预计”和样本限制。派生卡片不改写公众号正文；用户明确选择旧版时才使用 `article-to-img-skill --profile douyin`。
 
 ## 标准 Frontmatter 规范
 

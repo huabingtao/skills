@@ -1,4 +1,4 @@
-# 奶白紫色攻略卡片流程
+# 深蓝电竞攻略卡片流程
 
 从文章生成抖音图文时默认读取本文件。用户已提供成品图片时按现有上传流程直接展示并使用；只有用户另选样式时才回到旧切图器。
 
@@ -13,7 +13,7 @@
 
 ## 模板结构
 
-默认画布600×800 CSS像素，2倍渲染为1200×1600。奶白 `#F9F9F6`，紫色重点 `#514587`，深色正文；四周间距、字号和页脚直接复用 `assets/cards.css`，不要整页缩放。模板保留原版字体链接；字体网络不可用时回退系统字体，需要检查实际效果。
+默认画布600×800 CSS像素，2倍渲染为1200×1600。深蓝底 `#111F32`、青色重点 `#73DFEC`、浅色正文 `#E8EEF6`；四周间距、字号和页脚直接复用 `assets/cards.css`，不要整页缩放。模板保留原版字体链接；字体网络不可用时回退系统字体，需要检查实际效果。
 
 每页使用 `<section class="card single"><div class="body hybrid">…</div></section>`，正文最后加：
 
@@ -21,12 +21,12 @@
 <div class="brand"><b>弹壳呱呱</b><span>当次活动 · 档位</span></div>
 ```
 
-页码由生成器统一填写。普通说明页可移除 `single`；封面可用 `.hero` 与 `.cover-body`。
+方案编号使用32px CSS字号（成图64px），活动名称保留13px小字；目标进度数字保持48px CSS字号。页码由生成器统一填写。普通说明页可移除 `single`；封面可用 `.hero` 与 `.cover-body`。
 
 方案的内容结构如下，文字和数字都填写当次已核对内容：
 
 ```html
-<p class="eyebrow">活动名称 · 方案编号</p>
+<p class="eyebrow plan-heading"><span class="plan-label">方案1</span><span class="activity">活动名称</span></p>
 <div class="target"><span class="metric">目标进度</span><span>目标进度</span></div>
 <h3>累计奖励</h3>
 <div class="reward-list">

@@ -42,3 +42,22 @@
 /* Keep item names, quantities, and table rows intact across pages. */
 .item-name{min-width:0;overflow-wrap:anywhere}.qty{flex-shrink:0}
 .keep-together,.item-inline{break-inside:avoid}tr,.reward-line,.exchange-row{break-inside:avoid}
+
+/* User-selected default: navy esports, prominent plan labels (2026-10-18). */
+body{background:#0b1422;color:#e8eef6}
+.card{background:#111f32;color:#e8eef6}
+.card:before{content:"";position:absolute;left:0;right:0;top:0;height:6px;background:#73dfec}
+.card h1,.card h2,.card strong,.card .brand b,.card .reward-line .item-name,.card .exchange-row .item-name,.card .table td{color:#e8eef6}
+.card .eyebrow,.card.single h3,.card .metric,.card .reward-line .qty,.card .exchange-row .order,.card.single .target span:last-child{color:#73dfec}
+.card .metric{font-family:ui-monospace,"SFMono-Regular",Menlo,monospace}
+.card .brand,.card .muted,.card .footer-note,.card.single .basis,.card .exchange-row .hint,.card .row .label{color:#aab9cb}
+.card .brand,.card.single .reward-list .reward-line,.card .exchange-row,.card .table td,.card .row{border-color:#354559}
+.card .table th{background:#213c50;color:#73dfec;border-top:1px solid #456b80}
+.card.single .table tr.recommended td{background:#213c50;color:#73dfec}
+.card .callout,.card.single .target,.card h2{border-left-color:#73dfec}
+.card .tag,.card .mark{background:#213c50;color:#73dfec;border-color:#456b80}
+.single .eyebrow.plan-heading{display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin:0 0 4px;letter-spacing:0}
+.plan-heading .plan-label{font:800 32px/36px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;white-space:nowrap}
+.plan-heading .activity{font:700 13px/1.4 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;letter-spacing:1px;color:#aab9cb}
+.single .eyebrow.plan-heading + .target{margin-top:6px;margin-bottom:8px}
+.single:has(.plan-heading) .body{padding-top:28px}
