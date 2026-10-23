@@ -129,6 +129,7 @@ def login(playwright):
         args=[
             "--no-sandbox",
             "--disable-setuid-sandbox",
+            "--disable-gpu",
             "--window-position=50,50",
             "--window-size=1280,900",
             "--start-maximized",
@@ -137,11 +138,11 @@ def login(playwright):
     page = context.pages[0] if context.pages else context.new_page()
     page.bring_to_front()
 
-    page.goto(CREATOR_URL, wait_until="domcontentloaded", timeout=20000)
+    page.goto(CREATOR_URL, wait_until="domcontentloaded", timeout=30000)
     _wait_for_login(page, timeout_seconds=300)
 
     print("🔄 正在跳转至创作者发布页...")
-    page.goto(UPLOAD_URL, wait_until="domcontentloaded", timeout=20000)
+    page.goto(UPLOAD_URL, wait_until="domcontentloaded", timeout=30000)
     time.sleep(5)
 
     context.close()
@@ -190,6 +191,7 @@ def upload_image_post(
         args=[
             "--no-sandbox",
             "--disable-setuid-sandbox",
+            "--disable-gpu",
             "--window-position=50,50",
             "--window-size=1280,900",
             "--start-maximized",
@@ -203,7 +205,7 @@ def upload_image_post(
     try:
         # 1. Validate session, prompt for scan if needed
         print("🔍 验证登录状态...", flush=True)
-        page.goto(CREATOR_URL, wait_until="domcontentloaded", timeout=20000)
+        page.goto(CREATOR_URL, wait_until="domcontentloaded", timeout=30000)
         time.sleep(2)
 
         if not _validate_session(page):
