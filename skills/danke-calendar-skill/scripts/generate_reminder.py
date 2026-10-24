@@ -332,6 +332,7 @@ def main():
     parser.add_argument("--output-dir", help="自定义输出目录")
 
     parser.add_argument("--digest-file", type=Path, help="MCP get_reminder_rules 返回的 JSON 文件")
+    parser.add_argument("--skip-covers", action="store_true", help="跳过动态封面生成，沿用固定系列封面")
 
     args = parser.parse_args()
     target_date_str = args.date
@@ -366,7 +367,8 @@ def main():
     print(f"💾 文章已写入: {out_file}")
 
     # 自动生成专属封面
-    generate_covers(out_dir / "dist", target_date_obj)
+    if not args.skip_covers:
+        generate_covers(out_dir / "dist", target_date_obj)
 
     # 自动宏标注
     auto_tag_file(out_file)
