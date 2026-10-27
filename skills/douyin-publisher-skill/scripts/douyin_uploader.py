@@ -21,6 +21,31 @@ CREATOR_URL = "https://creator.douyin.com"
 UPLOAD_URL = f"{CREATOR_URL}/creator-micro/content/upload?default-tab=3"
 
 
+def bring_window_to_front():
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        user32 = ctypes.windll.user32
+        def enum_handler(hwnd, extra):
+            if user32.IsWindowVisible(hwnd):
+                length = user32.GetWindowTextLengthW(hwnd)
+                if length > 0:
+                    buff = ctypes.create_unicode_buffer(length + 1)
+                    user32.GetWindowTextW(hwnd, buff, length + 1)
+                    title = buff.value
+                    if any(k in title for k in ["抖音", "创作者", "Douyin", "Chromium", "Chrome", "Edge"]):
+                        user32.ShowWindow(hwnd, 3)  # SW_MAXIMIZE
+                        user32.SetForegroundWindow(hwnd)
+                        return False
+            return True
+        WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+        user32.EnumWindows(WNDENUMPROC(enum_handler), 0)
+    except Exception:
+        pass
+
+
+
 def verify_post_fields(title_input, body_editor, title, body_text):
     """Read back the filled controls; a successful typing call alone is insufficient."""
     if title_input is None or body_editor is None:
@@ -81,8 +106,9 @@ def _wait_for_login(page, timeout_seconds=300, qr_dir=None):
     print("   登录成功后将自动继续...", flush=True)
     print("=" * 50 + "\n", flush=True)
 
-    # Take screenshot and crop clean QR code after initial rendering
-    time.sleep(3)
+    # Bring window to front on desktop
+    bring_window_to_front()
+    time.sleep(2)
     target_qr_dir = Path(qr_dir) if qr_dir and Path(qr_dir).exists() else Path.cwd()
 
     qr_path = Path(target_qr_dir) / "抖音扫码登录.png"
@@ -227,6 +253,7 @@ def upload_image_post(
         # 1. Validate session, prompt for scan if needed
         print("🔍 验证登录状态...", flush=True)
         page.goto(CREATOR_URL, wait_until="domcontentloaded", timeout=20000)
+        bring_window_to_front()
         time.sleep(2)
 
         if not _validate_session(page):
@@ -469,6 +496,7 @@ def upload_image_post(
         time.sleep(1)
 
         if review:
+            bring_window_to_front()
             print("\n" + "=" * 50)
             print("👀 页面已就绪！已为您停留在编辑页面供人工审核 (REVIEW MODE)")
             print("=" * 50)
