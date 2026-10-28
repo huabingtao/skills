@@ -55,9 +55,11 @@ def verify_post_fields(title_input, body_editor, title, body_text):
                    if body_editor.get_attribute("contenteditable") == "true"
                    else body_editor.input_value())
     normalize = lambda value: re.sub(r"[\s\u200b\ufeff]+", "", value)
-    if actual_title != title[:20]:
-        raise RuntimeError("标题回读与预期不一致，保留页面供检查")
+    if actual_title.strip() != title[:20].strip():
+        print(f"⚠️ 标题回读差异: 实际='{actual_title}', 预期='{title[:20]}'")
+        raise RuntimeError(f"标题回读与预期不一致: 实际='{actual_title}', 预期='{title[:20]}'，保留页面供检查")
     if normalize(body_text) not in normalize(actual_body):
+        print(f"⚠️ 正文回读差异:\n实际='{actual_body[:100]}...'\n预期='{body_text[:100]}...'")
         raise RuntimeError("正文或话题回读不完整，保留页面供检查")
     return {"title": actual_title, "body": actual_body}
 
