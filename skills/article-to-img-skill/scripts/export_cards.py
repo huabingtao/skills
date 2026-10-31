@@ -90,7 +90,7 @@ def resolve_wechat_html(file_path):
     raise ValueError(f"❌ 不支持的文件格式: {file_path}，请提供 _wechat.html 或 .md 文件！")
 
 
-def direct_slice_html(input_file_path, output_dir=None, target_width=1080, target_height=1440, dpr=2, overlap_px=140):
+def direct_slice_html(input_file_path, output_dir=None, target_width=1080, target_height=1440, dpr=2, overlap_px=140, font_size_offset=0):
     """
     将经过 danke-strategy-skill 编译的 _wechat.html 渲染并切片为 3:4 比例的高清图集
     """
@@ -219,7 +219,7 @@ def direct_slice_html(input_file_path, output_dir=None, target_width=1080, targe
             print(f"⚠ 页面加载轻微超时或中断 (继续渲染): {e}")
 
         # 4. 注入样式优化：字体统一、大图自适应、小图标内联、清理多余二维码
-        page.evaluate("""() => {
+        page.evaluate("""({ fontSizeOffset }) => {
             const fontStyle = document.createElement('style');
             fontStyle.innerHTML = `
                 @font-face {
@@ -230,15 +230,15 @@ def direct_slice_html(input_file_path, output_dir=None, target_width=1080, targe
                     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI Emoji", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
                 }
                 html, body {
-                    font-size: 24px !important;
+                    font-size: ${24 + fontSizeOffset}px !important;
                 }
                 p, span, li, section, td, th {
-                    font-size: 22px !important;
+                    font-size: ${22 + fontSizeOffset}px !important;
                     line-height: 1.7 !important;
                 }
-                h1 { font-size: 34px !important; line-height: 1.4 !important; }
-                h2 { font-size: 28px !important; line-height: 1.4 !important; }
-                h3 { font-size: 25px !important; line-height: 1.4 !important; }
+                h1 { font-size: ${34 + fontSizeOffset}px !important; line-height: 1.4 !important; }
+                h2 { font-size: ${28 + fontSizeOffset}px !important; line-height: 1.4 !important; }
+                h3 { font-size: ${25 + fontSizeOffset}px !important; line-height: 1.4 !important; }
             `;
             document.head.appendChild(fontStyle);
 
@@ -266,8 +266,8 @@ def direct_slice_html(input_file_path, output_dir=None, target_width=1080, targe
                                ((styleW > 0 && styleW <= 36) && (styleH > 0 && styleH <= 36));
 
                 if (isIcon) {
-                    img.style.width = '28px';
-                    img.style.height = '28px';
+                    img.style.width = `${28 + fontSizeOffset}px`;
+                    img.style.height = `${28 + fontSizeOffset}px`;
                     img.style.verticalAlign = 'middle';
                     img.style.display = 'inline-block';
                     img.style.margin = '-3px 4px 0 4px';
@@ -299,7 +299,7 @@ def direct_slice_html(input_file_path, output_dir=None, target_width=1080, targe
 
                 // 4. 普通大图默认缩放
                 const rawStyle = img.getAttribute('style') || '';
-                if (!rawStyle.includes('23%') && !rawStyle.includes('48%') && !rawStyle.includes('grid')) {
+                if (!rawStyle.includes('23%') && !rawStyle.includes('31%') && !rawStyle.includes('48%') && !rawStyle.includes('grid')) {
                     img.style.maxHeight = '480px';
                     img.style.width = 'auto';
                     img.style.maxWidth = '90%';
@@ -318,6 +318,10 @@ def direct_slice_html(input_file_path, output_dir=None, target_width=1080, targe
                 const grid4Imgs = imgs.filter(img => {
                     const style = img.getAttribute('style') || '';
                     return style.includes('23%') || style.includes('grid4');
+                });
+                const grid3Imgs = imgs.filter(img => {
+                    const style = img.getAttribute('style') || '';
+                    return style.includes('31%') || style.includes('grid3');
                 });
                 const grid2Imgs = imgs.filter(img => {
                     const style = img.getAttribute('style') || '';
@@ -344,6 +348,29 @@ def direct_slice_html(input_file_path, output_dir=None, target_width=1080, targe
                         img.style.display = 'block';
                         img.style.margin = '0';
                         img.style.borderRadius = '6px';
+                        img.style.boxShadow = '0 3px 8px rgba(0,0,0,0.08)';
+                        img.style.boxSizing = 'border-box';
+                    });
+                } else if (grid3Imgs.length > 0) {
+                    parent.style.display = 'flex';
+                    parent.style.flexDirection = 'row';
+                    parent.style.flexWrap = 'wrap';
+                    parent.style.justifyContent = 'space-between';
+                    parent.style.alignItems = 'flex-start';
+                    parent.style.rowGap = '12px';
+                    parent.style.width = '100%';
+                    parent.style.margin = '12px 0';
+                    parent.style.clear = 'both';
+
+                    grid3Imgs.forEach(img => {
+                        img.style.flex = '0 0 31.8%';
+                        img.style.width = '31.8%';
+                        img.style.maxWidth = '31.8%';
+                        img.style.height = 'auto';
+                        img.style.maxHeight = 'none';
+                        img.style.display = 'block';
+                        img.style.margin = '0';
+                        img.style.borderRadius = '8px';
                         img.style.boxShadow = '0 3px 8px rgba(0,0,0,0.08)';
                         img.style.boxSizing = 'border-box';
                     });
@@ -383,7 +410,7 @@ def direct_slice_html(input_file_path, output_dir=None, target_width=1080, targe
                     }
                 }
             });
-        }""")
+        }""", {"fontSizeOffset": font_size_offset})
 
         page.wait_for_timeout(1500)
 
@@ -546,6 +573,8 @@ def main():
     parser.add_argument("--height", type=int, default=1440, help="卡片基准高度 (默认: 1440)")
     parser.add_argument("--dpr", type=int, default=2, help="设备像素比 DPR (默认: 2，生成 2160x2880)")
     parser.add_argument("--overlap", type=int, default=140, help="多图重叠像素深度 (默认: 140)")
+    parser.add_argument("--font-size-offset", "--font-boost", type=int, default=0,
+                        help="字号增量(px)，例如 4 代表调大2个字号")
     parser.add_argument("--profile", choices=["direct", "douyin"], default="direct",
                         help="direct 保持原直切流程；douyin 使用暖灰大字分页提纲")
     parser.add_argument("--outline", help="抖音分页提纲 JSON；默认查找文章目录/抖音提纲.json")
@@ -564,7 +593,8 @@ def main():
         target_width=args.width,
         target_height=args.height,
         dpr=args.dpr,
-        overlap_px=args.overlap
+        overlap_px=args.overlap,
+        font_size_offset=args.font_size_offset
     )
 
 
