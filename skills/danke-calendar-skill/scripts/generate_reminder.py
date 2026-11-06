@@ -52,7 +52,7 @@ def clean_status_text(status_text: str, name: str) -> str:
     return cleaned
 
 
-def fetch_daily_digest(target_date: str, api_base: str = "http://localhost:3000") -> dict:
+def fetch_daily_digest(target_date: str, api_base: str = "http://localhost:6101") -> dict:
     """只接受 danke-core 规则引擎的结果；服务失败时停止生成。"""
     url = f"{api_base.rstrip('/')}/reminders/daily-digest?date={target_date}"
     req = urllib.request.Request(url, headers={"User-Agent": "danke-calendar-skill/1.0"})
@@ -328,7 +328,7 @@ def generate_covers(out_dir: Path, target_date_obj: datetime.date = None):
 def main():
     parser = argparse.ArgumentParser(description="自动生成《弹壳特攻队》每日玩法待办与倒计时日历文章")
     parser.add_argument("--date", help="指定生成日期 (YYYY-MM-DD)，默认为当天", default=datetime.date.today().strftime("%Y-%m-%d"))
-    parser.add_argument("--api-base", help="danke-core API 地址", default=os.environ.get("DANKE_API_BASE_URL", "http://localhost:3000"))
+    parser.add_argument("--api-base", help="danke-core API 地址", default=os.environ.get("DANKE_API_BASE_URL", "http://localhost:6101"))
     parser.add_argument("--output-dir", help="自定义输出目录")
 
     parser.add_argument("--digest-file", type=Path, help="MCP get_reminder_rules 返回的 JSON 文件")
