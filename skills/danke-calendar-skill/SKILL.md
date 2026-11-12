@@ -40,7 +40,7 @@ description: "专为《弹壳特攻队》每日活动待办与倒计时日历打
    - 往期推荐采用纯文本水平居中优雅链接风格（无小图标、无卡片图片）。
 4. **【日历封面规范】**：公众号日历沿用共同系列封面 `my-articles-md/提醒/日历系列封面/dist/cover_calendar_series.png`，复制到当天文章 `dist/cover_calendar_series.png`，同步 Frontmatter 与微信元数据。不使用自动生成的带日期横版封面。
 5. **【目录与文件命名规范】**：
-   - 必须按短格式日期目录存放：`project/danke-creator/my-articles-md/提醒/YY.M.D/YY.M.D.md`（例如 `26.9.5/26.9.5.md`）。
+   - 必须按短格式日期目录存放：`project/danke/danke-creator/my-articles-md/提醒/YY.M.D/YY.M.D.md`（例如 `26.9.5/26.9.5.md`）。
 6. **【专有名词宏自动标注】**：
    - 自动挂载 `auto_tag.py`，为游戏实体包裹 `{{...}}` 宏标签。
    - 道具、装备等命中 `image_mapping.json` 的实体必须保留 `{{...}}` 宏；不得在整理、强调或公众号排版时删除宏。宏用于公众号编译器映射对应游戏图标。

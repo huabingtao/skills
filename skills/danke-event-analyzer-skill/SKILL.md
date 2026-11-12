@@ -131,3 +131,4 @@ python3 skills/skills/danke-event-analyzer-skill/scripts/analyze_event.py --date
 1. **知识库沉淀**：以 Markdown 文件格式保存至工作区 `project/danke/danke-wiki/events/YYYY-MM-DD_活动名称.md`；
 2. **符合去 AI 味排版**：大标题（H1）、小章节（H2/H3）严禁使用 Emoji 图标，保持极简专业；
 3. **附带耗时统计**：通报各解析环节耗时与总耗时。
+

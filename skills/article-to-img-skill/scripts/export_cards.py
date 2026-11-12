@@ -90,7 +90,7 @@ def resolve_wechat_html(file_path):
     raise ValueError(f"❌ 不支持的文件格式: {file_path}，请提供 _wechat.html 或 .md 文件！")
 
 
-def direct_slice_html(input_file_path, output_dir=None, target_width=1080, target_height=1440, dpr=2, overlap_px=140, font_size_offset=0):
+def direct_slice_html(input_file_path, output_dir=None, target_width=1080, target_height=1440, dpr=2, overlap_px=140, font_size_offset=4):
     """
     将经过 danke-strategy-skill 编译的 _wechat.html 渲染并切片为 3:4 比例的高清图集
     """
@@ -573,8 +573,8 @@ def main():
     parser.add_argument("--height", type=int, default=1440, help="卡片基准高度 (默认: 1440)")
     parser.add_argument("--dpr", type=int, default=2, help="设备像素比 DPR (默认: 2，生成 2160x2880)")
     parser.add_argument("--overlap", type=int, default=140, help="多图重叠像素深度 (默认: 140)")
-    parser.add_argument("--font-size-offset", "--font-boost", type=int, default=0,
-                        help="字号增量(px)，例如 4 代表调大2个字号")
+    parser.add_argument("--font-size-offset", "--font-boost", type=int, default=4,
+                        help="字号增量(px)，默认调大2个字号(+4px)，保证移动端阅读清晰")
     parser.add_argument("--profile", choices=["direct", "douyin"], default="direct",
                         help="direct 保持原直切流程；douyin 使用暖灰大字分页提纲")
     parser.add_argument("--outline", help="抖音分页提纲 JSON；默认查找文章目录/抖音提纲.json")

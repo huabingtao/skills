@@ -357,7 +357,12 @@ def main():
     if args.output_dir:
         out_dir = Path(args.output_dir)
     else:
-        creator_root = ws / "content" / "danke-creator" if (ws / "content" / "danke-creator").is_dir() else ws / "project" / "danke-creator"
+        if (ws / "project" / "danke" / "danke-creator").is_dir():
+            creator_root = ws / "project" / "danke" / "danke-creator"
+        elif (ws / "content" / "danke-creator").is_dir():
+            creator_root = ws / "content" / "danke-creator"
+        else:
+            creator_root = ws / "project" / "danke-creator"
         out_dir = creator_root / "my-articles-md" / "提醒" / short_date
 
     out_dir.mkdir(parents=True, exist_ok=True)
