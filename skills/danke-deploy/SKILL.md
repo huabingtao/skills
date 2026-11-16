@@ -18,7 +18,8 @@ description: 打包和部署 danke-web、danke-admin、danke-core 到生产服�
 ### 2. 海外节点
 - **主机 IP**：`195.72.191.81`
 - **凭证存储**：`~/.config/danke-deploy/overseas_server.json`（禁止将凭证提交至仓库）
-- **Web 门户**：`https://danke.guaguayun.top`（目录 `/var/www/danke-web/out`）
+- **Web 门户（生产）**：`https://danke.guaguayun.top`（目录 `/var/www/danke-web/out`）
+- **Web 门户（测试服）**：`https://testdanke.guaguayun.top`（目录 `/var/www/danke-web-test/out`，Nginx 追加 `X-Robots-Tag: noindex, nofollow`）
 - **Admin 看板**：`https://admin.guaguayun.top`（目录 `/var/www/danke-admin/out`）
 - **Core 中枢**：`https://core.guaguayun.top`（目录 `/var/www/danke-core/dist`，PM2 `danke-core`，端口 3003）
 
@@ -67,7 +68,8 @@ python3 scripts/deploy_web_articles.py
 
 | 场景 / 目标 | 命令 | 说明 |
 | :--- | :--- | :--- |
-| **海外独立部署 Web** | `python3 scripts/deploy_services_to_overseas.py --web [--build]` | 仅部署 `danke-web`，秒级原子切流 |
+| **海外独立部署 Web** | `python3 scripts/deploy_services_to_overseas.py --web [--build]` | 仅部署 `danke-web`（生产），秒级原子切流 |
+| **海外独立部署 Web 测试服** | `python3 scripts/deploy_services_to_overseas.py --web-test [--build]` | 仅部署 `danke-web` 至 `testdanke.guaguayun.top`（`/var/www/danke-web-test/out`），隔离生产环境 |
 | **海外独立部署 Admin** | `python3 scripts/deploy_services_to_overseas.py --admin [--build]` | 仅部署 `danke-admin`，原子切流 |
 | **海外独立部署 Core** | `python3 scripts/deploy_services_to_overseas.py --core [--build]` | 仅部署 `danke-core`，含数据库备份与 PM2 重启 |
 | **海外全量部署** | `python3 scripts/deploy_services_to_overseas.py --all [--build]` | 全栈三个模块顺序部署与全链路健康探针 |
